@@ -69,7 +69,7 @@ class BarbellViewModel @JvmOverloads constructor(
   private var autoSaveJob: Job? = null
 
   init {
-    recalculate()
+    recalculate(triggerAutoSave = false)
   }
 
   fun setTargetWeight(weight: Double) {
@@ -241,7 +241,7 @@ class BarbellViewModel @JvmOverloads constructor(
         activeTab = 0
       )
     }
-    recalculate()
+    recalculate(triggerAutoSave = false)
   }
 
   fun deleteHistoryPlan(id: Long) {
@@ -375,7 +375,7 @@ class BarbellViewModel @JvmOverloads constructor(
     }
   }
 
-  private fun recalculate() {
+  private fun recalculate(triggerAutoSave: Boolean = true) {
     val state = _uiState.value
     val barWeight = getEffectiveBarWeight()
     val collarsWeight = getEffectiveCollarsWeight()
@@ -411,6 +411,8 @@ class BarbellViewModel @JvmOverloads constructor(
       )
     }
 
-    scheduleAutoSave()
+    if (triggerAutoSave) {
+      scheduleAutoSave()
+    }
   }
 }

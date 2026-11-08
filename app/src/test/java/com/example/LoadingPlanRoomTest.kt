@@ -11,8 +11,13 @@ import com.example.data.repository.LoadingPlanRepository
 import com.example.model.BarType
 import com.example.model.WeightUnit
 import com.example.ui.BarbellViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -24,16 +29,19 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class LoadingPlanRoomTest {
 
+  private val testDispatcher = StandardTestDispatcher()
   private lateinit var database: AppDatabase
   private lateinit var dao: LoadingPlanDao
   private lateinit var repository: LoadingPlanRepository
 
   @Before
   fun setUp() {
+    Dispatchers.setMain(testDispatcher)
     val context = ApplicationProvider.getApplicationContext<Context>()
     database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
       .allowMainThreadQueries()
@@ -44,6 +52,7 @@ class LoadingPlanRoomTest {
 
   @After
   fun tearDown() {
+    Dispatchers.resetMain()
     database.close()
   }
 
@@ -183,5 +192,31 @@ class LoadingPlanRoomTest {
     assertTrue(state.collarsEnabled)
     assertEquals(0, state.activeTab)
     assertEquals(315.0, state.calculationResult.targetWeight, 0.001)
+  }
+
+  @Test
+  fun testViewModelInitDoesNotPolluteEmptyHistory() = runTest {
+    val application = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = BarbellViewModel(application, repository)
+
+    // Initially recent plans should be completely empty
+    val plans = repository.recentPlans.first()
+    assertTrue(plans.isEmpty())
+  }
+
+  @Test
+  fun testViewModelAutoSavesAfterAdjustment() = runTest {
+    val application = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = BarbellViewModel(application, repository)
+
+    viewModel.setTargetWeight(275.0)
+
+    // Advance virtual time past debounce delay (800ms) on test dispatcher
+    testScheduler.advanceTimeBy(1000)
+    testScheduler.runCurrent()
+
+    val plans = repository.recentPlans.first()
+    assertEquals(1, plans.size)
+    assertEquals(275.0, plans[0].targetWeight, 0.001)
   }
 }
