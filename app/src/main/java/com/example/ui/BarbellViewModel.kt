@@ -172,6 +172,43 @@ class BarbellViewModel @JvmOverloads constructor(
     recalculate()
   }
 
+  fun exclude35LbPlates() {
+    _uiState.update { state ->
+      val updatedLbs = state.lbsPlates.map {
+        if (it.weight == 35.0) it.copy(isEnabled = false) else it
+      }
+      val updatedKg = state.kgPlates.map {
+        if (it.weight == 15.0) it.copy(isEnabled = false) else it
+      }
+      state.copy(lbsPlates = updatedLbs, kgPlates = updatedKg)
+    }
+    recalculate()
+  }
+
+  fun enableAllPlates() {
+    _uiState.update { state ->
+      val updatedLbs = state.lbsPlates.map { it.copy(isEnabled = true) }
+      val updatedKg = state.kgPlates.map { it.copy(isEnabled = true) }
+      state.copy(lbsPlates = updatedLbs, kgPlates = updatedKg)
+    }
+    recalculate()
+  }
+
+  fun applyMinimalistPreset() {
+    _uiState.update { state ->
+      val updatedLbs = state.lbsPlates.map {
+        val keep = it.weight in listOf(45.0, 25.0, 10.0, 5.0, 2.5)
+        it.copy(isEnabled = keep)
+      }
+      val updatedKg = state.kgPlates.map {
+        val keep = it.weight in listOf(25.0, 20.0, 10.0, 5.0, 2.5)
+        it.copy(isEnabled = keep)
+      }
+      state.copy(lbsPlates = updatedLbs, kgPlates = updatedKg)
+    }
+    recalculate()
+  }
+
   // Load a previously saved plan from Room database
   fun loadPlan(plan: LoadingPlanEntity) {
     val unit = if (plan.unit == "KG") WeightUnit.KG else WeightUnit.LBS

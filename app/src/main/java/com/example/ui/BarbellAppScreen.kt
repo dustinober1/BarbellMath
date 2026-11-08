@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
@@ -63,9 +64,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.model.WeightUnit
 import com.example.ui.components.BarSelectorSheet
 import com.example.ui.components.BarbellCanvasSection
 import com.example.ui.components.InventoryManagerSheet
+import com.example.ui.components.InventorySettingsScreen
 import com.example.ui.components.LoadingHistorySheet
 import com.example.ui.components.PlateBreakdownCard
 import com.example.ui.components.ReversePlateBuilderSection
@@ -157,13 +160,13 @@ fun BarbellAppScreen(
           }
 
           IconButton(
-            onClick = { isInventorySheetOpen = true },
+            onClick = { viewModel.setActiveTab(3) },
             modifier = Modifier.testTag("open_inventory_button")
           ) {
             Icon(
-              imageVector = Icons.Default.Inventory2,
-              contentDescription = "Plate Inventory",
-              tint = MaterialTheme.colorScheme.onSurfaceVariant
+              imageVector = Icons.Default.Tune,
+              contentDescription = "Home Gym Settings",
+              tint = if (uiState.activeTab == 3) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )
           }
 
@@ -243,6 +246,24 @@ fun BarbellAppScreen(
             selectedTextColor = MaterialTheme.colorScheme.primary
           ),
           modifier = Modifier.testTag("nav_tab_reverse_rack")
+        )
+
+        NavigationBarItem(
+          selected = uiState.activeTab == 3,
+          onClick = { viewModel.setActiveTab(3) },
+          icon = {
+            Icon(
+              imageVector = Icons.Default.Tune,
+              contentDescription = "Settings"
+            )
+          },
+          label = { Text("Settings") },
+          colors = NavigationBarItemDefaults.colors(
+            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            selectedTextColor = MaterialTheme.colorScheme.primary
+          ),
+          modifier = Modifier.testTag("nav_tab_settings")
         )
       }
     }
@@ -333,6 +354,28 @@ fun BarbellAppScreen(
             onRemovePlate = { viewModel.removeReversePlate(it) },
             onClearPlates = { viewModel.clearReversePlates() },
             onApplyToTarget = { viewModel.applyReverseWeightToTarget() }
+          )
+        }
+      }
+
+      // Tab 3: Home Gym Inventory Settings Screen
+      if (uiState.activeTab == 3) {
+        item {
+          InventorySettingsScreen(
+            plates = if (uiState.unit == WeightUnit.LBS) uiState.lbsPlates else uiState.kgPlates,
+            unit = uiState.unit,
+            selectedBar = uiState.selectedBar,
+            customBarWeight = uiState.customBarWeight,
+            collarsEnabled = uiState.collarsEnabled,
+            onTogglePlate = { viewModel.togglePlateEnabled(it) },
+            onUpdatePairs = { weight, pairs -> viewModel.updatePlateAvailablePairs(weight, pairs) },
+            onUnitChange = { viewModel.setUnit(it) },
+            onExclude35s = { viewModel.exclude35LbPlates() },
+            onEnableAll = { viewModel.enableAllPlates() },
+            onApplyMinimalist = { viewModel.applyMinimalistPreset() },
+            onResetDefaults = { viewModel.resetPlateInventory() },
+            onOpenBarSelector = { isBarSelectorSheetOpen = true },
+            onNavigateBack = { viewModel.setActiveTab(0) }
           )
         }
       }

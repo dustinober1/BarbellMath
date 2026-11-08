@@ -5,6 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -36,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.example.model.PlateCalculationResult
 import com.example.ui.theme.PlateGreen
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlateBreakdownCard(
   result: PlateCalculationResult,
@@ -289,6 +293,188 @@ fun PlateBreakdownCard(
           fontWeight = FontWeight.Black,
           color = MaterialTheme.colorScheme.primary
         )
+      }
+
+      // Equipment Gathering Summary (Total Plates to Grab from Gym Rack)
+      if (result.platesPerSide.isNotEmpty()) {
+        Spacer(modifier = Modifier.height(16.dp))
+        Surface(
+          shape = RoundedCornerShape(20.dp),
+          color = Color(0xFFF7F2FA),
+          border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEADDFF)),
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("equipment_gathering_summary")
+        ) {
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+          ) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+              ) {
+                Box(
+                  modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                  contentAlignment = Alignment.Center
+                ) {
+                  Icon(
+                    imageVector = Icons.Default.FitnessCenter,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(16.dp)
+                  )
+                }
+                Column {
+                  Text(
+                    text = "Total Plates to Gather",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                  )
+                  Text(
+                    text = "Total needed across both barbell sleeves",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                  )
+                }
+              }
+
+              Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primary
+              ) {
+                Text(
+                  text = "${result.totalPlatesOnBar} PLATES",
+                  style = MaterialTheme.typography.labelSmall,
+                  fontWeight = FontWeight.Black,
+                  letterSpacing = 0.5.sp,
+                  color = MaterialTheme.colorScheme.onPrimary,
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+              }
+            }
+
+            // Summary Chips of each plate type needed
+            FlowRow(
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              verticalArrangement = Arrangement.spacedBy(8.dp),
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              result.platesPerSide.forEach { plateCount ->
+                val totalQty = plateCount.quantity * 2
+                val pairs = plateCount.quantity
+
+                Surface(
+                  shape = RoundedCornerShape(14.dp),
+                  color = MaterialTheme.colorScheme.surface,
+                  border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                  ),
+                  modifier = Modifier.testTag("gather_plate_summary_${plateCount.plate.formattedWeight}")
+                ) {
+                  Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                  ) {
+                    Box(
+                      modifier = Modifier
+                        .size(26.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(plateCount.plate.color)
+                        .border(0.5.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(6.dp)),
+                      contentAlignment = Alignment.Center
+                    ) {
+                      Text(
+                        text = plateCount.plate.formattedWeight,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 9.sp,
+                        color = plateCount.plate.textColor
+                      )
+                    }
+
+                    Column {
+                      Text(
+                        text = "${totalQty} × ${plateCount.plate.formattedWeight} ${result.unit.shortLabel}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onSurface
+                      )
+                      Text(
+                        text = if (pairs == 1) "1 pair (${plateCount.quantity}/side)" else "$pairs pairs (${plateCount.quantity}/side)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                    }
+                  }
+                }
+              }
+
+              if (result.collarsWeight > 0) {
+                Surface(
+                  shape = RoundedCornerShape(14.dp),
+                  color = MaterialTheme.colorScheme.surface,
+                  border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                  ),
+                  modifier = Modifier.testTag("gather_collars_summary")
+                ) {
+                  Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                  ) {
+                    Box(
+                      modifier = Modifier
+                        .size(26.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(0xFFDC2626)),
+                      contentAlignment = Alignment.Center
+                    ) {
+                      Text(
+                        text = "C",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 10.sp,
+                        color = Color.White
+                      )
+                    }
+
+                    Column {
+                      Text(
+                        text = "2 × Collars",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onSurface
+                      )
+                      Text(
+                        text = "1 pair (1/sleeve)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                      )
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
