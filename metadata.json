@@ -1,0 +1,6 @@
+{
+  "name": "Barbell Plate Calculator",
+  "description": "Calculates the exact weight plates to load on each side of the barbell for any target weight, bar type, and unit.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

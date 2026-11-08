@@ -1,0 +1,271 @@
+package com.example.ui
+
+import androidx.lifecycle.ViewModel
+import com.example.calculator.BarbellCalculator
+import com.example.model.BarType
+import com.example.model.Plate
+import com.example.model.PlateCalculationResult
+import com.example.model.PlateCount
+import com.example.model.WarmupSet
+import com.example.model.WeightUnit
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+
+data class BarbellUiState(
+  val targetWeight: Double = 135.0,
+  val unit: WeightUnit = WeightUnit.LBS,
+  val selectedBar: BarType = BarType.OLYMPIC_MENS,
+  val customBarWeight: Double = 45.0,
+  val collarsEnabled: Boolean = false,
+  val collarsWeightLbs: Double = 1.0,
+  val collarsWeightKg: Double = 0.5,
+  val lbsPlates: List<Plate> = Plate.DEFAULT_LBS_PLATES,
+  val kgPlates: List<Plate> = Plate.DEFAULT_KG_PLATES,
+  val calculationResult: PlateCalculationResult = BarbellCalculator.calculatePlates(
+    targetWeight = 135.0,
+    barWeight = 45.0,
+    collarsWeight = 0.0,
+    availablePlates = Plate.DEFAULT_LBS_PLATES,
+    unit = WeightUnit.LBS
+  ),
+  val warmupSets: List<WarmupSet> = emptyList(),
+  val reversePlatesPerSide: List<PlateCount> = emptyList(),
+  val reverseTotalWeight: Double = 45.0,
+  val isFullBarView: Boolean = false,
+  val activeTab: Int = 0 // 0: Plate Calculator, 1: Warm-up Ladder, 2: Reverse Racker
+)
+
+class BarbellViewModel : ViewModel() {
+
+  private val _uiState = MutableStateFlow(BarbellUiState())
+  val uiState: StateFlow<BarbellUiState> = _uiState.asStateFlow()
+
+  init {
+    recalculate()
+  }
+
+  fun setTargetWeight(weight: Double) {
+    val cleanWeight = maxOf(0.0, weight)
+    _uiState.update { it.copy(targetWeight = cleanWeight) }
+    recalculate()
+  }
+
+  fun adjustTargetWeight(delta: Double) {
+    val newWeight = maxOf(0.0, _uiState.value.targetWeight + delta)
+    _uiState.update { it.copy(targetWeight = newWeight) }
+    recalculate()
+  }
+
+  fun setUnit(unit: WeightUnit) {
+    if (_uiState.value.unit == unit) return
+    val currentWeight = _uiState.value.targetWeight
+    // Smart converted target weight
+    val convertedWeight = if (unit == WeightUnit.KG) {
+      // lbs -> kg rounded to 2.5kg
+      maxOf(20.0, (currentWeight * 0.45359237 / 2.5).toInt() * 2.5)
+    } else {
+      // kg -> lbs rounded to 5lbs
+      maxOf(45.0, (currentWeight * 2.20462 / 5.0).toInt() * 5.0)
+    }
+
+    _uiState.update {
+      it.copy(
+        unit = unit,
+        targetWeight = convertedWeight
+      )
+    }
+    recalculate()
+  }
+
+  fun selectBar(bar: BarType) {
+    _uiState.update { it.copy(selectedBar = bar) }
+    recalculate()
+  }
+
+  fun setCustomBarWeight(weight: Double) {
+    _uiState.update { it.copy(customBarWeight = maxOf(0.0, weight)) }
+    recalculate()
+  }
+
+  fun toggleCollars(enabled: Boolean) {
+    _uiState.update { it.copy(collarsEnabled = enabled) }
+    recalculate()
+  }
+
+  fun toggleFullBarView() {
+    _uiState.update { it.copy(isFullBarView = !it.isFullBarView) }
+  }
+
+  fun setActiveTab(tabIndex: Int) {
+    _uiState.update { it.copy(activeTab = tabIndex) }
+  }
+
+  fun togglePlateEnabled(plateWeight: Double) {
+    _uiState.update { state ->
+      if (state.unit == WeightUnit.LBS) {
+        val updated = state.lbsPlates.map {
+          if (it.weight == plateWeight) it.copy(isEnabled = !it.isEnabled) else it
+        }
+        state.copy(lbsPlates = updated)
+      } else {
+        val updated = state.kgPlates.map {
+          if (it.weight == plateWeight) it.copy(isEnabled = !it.isEnabled) else it
+        }
+        state.copy(kgPlates = updated)
+      }
+    }
+    recalculate()
+  }
+
+  fun updatePlateAvailablePairs(plateWeight: Double, pairs: Int) {
+    val cleanPairs = maxOf(0, pairs)
+    _uiState.update { state ->
+      if (state.unit == WeightUnit.LBS) {
+        val updated = state.lbsPlates.map {
+          if (it.weight == plateWeight) it.copy(availablePairs = cleanPairs) else it
+        }
+        state.copy(lbsPlates = updated)
+      } else {
+        val updated = state.kgPlates.map {
+          if (it.weight == plateWeight) it.copy(availablePairs = cleanPairs) else it
+        }
+        state.copy(kgPlates = updated)
+      }
+    }
+    recalculate()
+  }
+
+  fun resetPlateInventory() {
+    _uiState.update {
+      it.copy(
+        lbsPlates = Plate.DEFAULT_LBS_PLATES,
+        kgPlates = Plate.DEFAULT_KG_PLATES
+      )
+    }
+    recalculate()
+  }
+
+  // Reverse Racker actions
+  fun addReversePlate(plate: Plate) {
+    val currentPlates = _uiState.value.reversePlatesPerSide.toMutableList()
+    val existingIndex = currentPlates.indexOfFirst { it.plate.weight == plate.weight }
+    if (existingIndex >= 0) {
+      val item = currentPlates[existingIndex]
+      currentPlates[existingIndex] = item.copy(quantity = item.quantity + 1)
+    } else {
+      currentPlates.add(PlateCount(plate, 1))
+    }
+    // Sort heaviest inside
+    currentPlates.sortByDescending { it.plate.weight }
+
+    val barWeight = getEffectiveBarWeight()
+    val collars = getEffectiveCollarsWeight()
+    val total = BarbellCalculator.calculateReverseWeight(currentPlates, barWeight, collars)
+
+    _uiState.update {
+      it.copy(
+        reversePlatesPerSide = currentPlates,
+        reverseTotalWeight = total
+      )
+    }
+  }
+
+  fun removeReversePlate(plate: Plate) {
+    val currentPlates = _uiState.value.reversePlatesPerSide.toMutableList()
+    val existingIndex = currentPlates.indexOfFirst { it.plate.weight == plate.weight }
+    if (existingIndex >= 0) {
+      val item = currentPlates[existingIndex]
+      if (item.quantity > 1) {
+        currentPlates[existingIndex] = item.copy(quantity = item.quantity - 1)
+      } else {
+        currentPlates.removeAt(existingIndex)
+      }
+    }
+    val barWeight = getEffectiveBarWeight()
+    val collars = getEffectiveCollarsWeight()
+    val total = BarbellCalculator.calculateReverseWeight(currentPlates, barWeight, collars)
+
+    _uiState.update {
+      it.copy(
+        reversePlatesPerSide = currentPlates,
+        reverseTotalWeight = total
+      )
+    }
+  }
+
+  fun clearReversePlates() {
+    val barWeight = getEffectiveBarWeight()
+    val collars = getEffectiveCollarsWeight()
+    _uiState.update {
+      it.copy(
+        reversePlatesPerSide = emptyList(),
+        reverseTotalWeight = barWeight + collars
+      )
+    }
+  }
+
+  fun applyReverseWeightToTarget() {
+    val weight = _uiState.value.reverseTotalWeight
+    _uiState.update {
+      it.copy(
+        targetWeight = weight,
+        activeTab = 0
+      )
+    }
+    recalculate()
+  }
+
+  private fun getEffectiveBarWeight(): Double {
+    val state = _uiState.value
+    return if (state.selectedBar.isCustom) {
+      state.customBarWeight
+    } else {
+      state.selectedBar.getWeight(state.unit)
+    }
+  }
+
+  private fun getEffectiveCollarsWeight(): Double {
+    val state = _uiState.value
+    if (!state.collarsEnabled) return 0.0
+    return if (state.unit == WeightUnit.LBS) state.collarsWeightLbs else state.collarsWeightKg
+  }
+
+  private fun recalculate() {
+    val state = _uiState.value
+    val barWeight = getEffectiveBarWeight()
+    val collarsWeight = getEffectiveCollarsWeight()
+    val plates = if (state.unit == WeightUnit.LBS) state.lbsPlates else state.kgPlates
+
+    val result = BarbellCalculator.calculatePlates(
+      targetWeight = state.targetWeight,
+      barWeight = barWeight,
+      collarsWeight = collarsWeight,
+      availablePlates = plates,
+      unit = state.unit
+    )
+
+    val warmups = BarbellCalculator.generateWarmupSets(
+      workingWeight = state.targetWeight,
+      barWeight = barWeight,
+      collarsWeight = collarsWeight,
+      availablePlates = plates,
+      unit = state.unit
+    )
+
+    val reverseTotal = BarbellCalculator.calculateReverseWeight(
+      state.reversePlatesPerSide,
+      barWeight,
+      collarsWeight
+    )
+
+    _uiState.update {
+      it.copy(
+        calculationResult = result,
+        warmupSets = warmups,
+        reverseTotalWeight = reverseTotal
+      )
+    }
+  }
+}

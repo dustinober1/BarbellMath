@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Bar Shaft -->
+    <path
+        android:fillColor="#D1D5DB"
+        android:pathData="M18,51 h72 v6 h-72 z" />
+    
+    <!-- Center knurling marks -->
+    <path
+        android:fillColor="#9CA3AF"
+        android:pathData="M48,51 h12 v6 h-12 z" />
+    
+    <!-- Left Inside Collar Stopper -->
+    <path
+        android:fillColor="#6B7280"
+        android:pathData="M37,45 h4 v18 h-4 z" />
+    <!-- Right Inside Collar Stopper -->
+    <path
+        android:fillColor="#6B7280"
+        android:pathData="M67,45 h4 v18 h-4 z" />
+
+    <!-- Left Plates -->
+    <!-- 45/25 Red plate (Large) -->
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M31,34 h5 v40 h-5 z" />
+    <!-- 35/20 Blue plate -->
+    <path
+        android:fillColor="#3B82F6"
+        android:pathData="M26,38 h4 v32 h-4 z" />
+    <!-- 25/15 Yellow plate -->
+    <path
+        android:fillColor="#EAB308"
+        android:pathData="M22,42 h3 v24 h-3 z" />
+    <!-- 10/10 Green plate -->
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M19,46 h2 v16 h-2 z" />
+
+    <!-- Right Plates -->
+    <!-- 45/25 Red plate (Large) -->
+    <path
+        android:fillColor="#EF4444"
+        android:pathData="M72,34 h5 v40 h-5 z" />
+    <!-- 35/20 Blue plate -->
+    <path
+        android:fillColor="#3B82F6"
+        android:pathData="M78,38 h4 v32 h-4 z" />
+    <!-- 25/15 Yellow plate -->
+    <path
+        android:fillColor="#EAB308"
+        android:pathData="M83,42 h3 v24 h-3 z" />
+    <!-- 10/10 Green plate -->
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M87,46 h2 v16 h-2 z" />
+
+    <!-- Left/Right Sleeve Tips -->
+    <path
+        android:fillColor="#E5E7EB"
+        android:pathData="M15,49 h3 v10 h-3 z" />
+    <path
+        android:fillColor="#E5E7EB"
+        android:pathData="M90,49 h3 v10 h-3 z" />
+</vector>
