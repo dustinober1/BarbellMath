@@ -24,9 +24,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -63,6 +66,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.components.BarSelectorSheet
 import com.example.ui.components.BarbellCanvasSection
 import com.example.ui.components.InventoryManagerSheet
+import com.example.ui.components.LoadingHistorySheet
 import com.example.ui.components.PlateBreakdownCard
 import com.example.ui.components.ReversePlateBuilderSection
 import com.example.ui.components.TargetWeightControlCard
@@ -75,9 +79,11 @@ fun BarbellAppScreen(
   modifier: Modifier = Modifier
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  val recentPlans by viewModel.recentPlans.collectAsStateWithLifecycle()
 
   var isBarSelectorSheetOpen by remember { mutableStateOf(false) }
   var isInventorySheetOpen by remember { mutableStateOf(false) }
+  var isHistorySheetOpen by remember { mutableStateOf(false) }
 
   val effectiveBarWeight = if (uiState.selectedBar.isCustom) {
     uiState.customBarWeight
@@ -114,8 +120,42 @@ fun BarbellAppScreen(
 
         Row(
           verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(8.dp)
+          horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+          IconButton(
+            onClick = { isHistorySheetOpen = true },
+            modifier = Modifier.testTag("open_history_button")
+          ) {
+            if (recentPlans.isNotEmpty()) {
+              BadgedBox(
+                badge = {
+                  Badge(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                  ) {
+                    Text(
+                      text = "${recentPlans.size}",
+                      fontSize = 10.sp,
+                      fontWeight = FontWeight.Bold
+                    )
+                  }
+                }
+              ) {
+                Icon(
+                  imageVector = Icons.Default.History,
+                  contentDescription = "Workout History",
+                  tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+            } else {
+              Icon(
+                imageVector = Icons.Default.History,
+                contentDescription = "Workout History",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+            }
+          }
+
           IconButton(
             onClick = { isInventorySheetOpen = true },
             modifier = Modifier.testTag("open_inventory_button")
@@ -326,6 +366,17 @@ fun BarbellAppScreen(
       onUpdateAvailablePairs = { weight, pairs -> viewModel.updatePlateAvailablePairs(weight, pairs) },
       onResetInventory = { viewModel.resetPlateInventory() },
       onDismiss = { isInventorySheetOpen = false }
+    )
+  }
+
+  // Workout History Modal Sheet
+  if (isHistorySheetOpen) {
+    LoadingHistorySheet(
+      recentPlans = recentPlans,
+      onSelectPlan = { viewModel.loadPlan(it) },
+      onDeletePlan = { viewModel.deleteHistoryPlan(it) },
+      onClearAll = { viewModel.clearHistory() },
+      onDismiss = { isHistorySheetOpen = false }
     )
   }
 }

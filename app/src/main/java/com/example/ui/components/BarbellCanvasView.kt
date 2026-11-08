@@ -1,7 +1,5 @@
 package com.example.ui.components
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,17 +14,26 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,9 +42,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -45,6 +49,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.model.Plate
 import com.example.model.PlateCount
 import com.example.model.WeightUnit
 import com.example.ui.theme.DarkSurfaceVariant
@@ -52,7 +57,6 @@ import com.example.ui.theme.PlateRed
 import com.example.ui.theme.Slate700
 import com.example.ui.theme.Slate800
 import com.example.ui.theme.Slate900
-import com.example.ui.theme.SteelChrome
 
 @Composable
 fun BarbellCanvasSection(
@@ -64,13 +68,23 @@ fun BarbellCanvasSection(
   onToggleFullBar: () -> Unit,
   modifier: Modifier = Modifier
 ) {
+  var selectedPlateIndex by remember { mutableStateOf<Int?>(null) }
+
+  // Flatten plates into individual items from inside flange to outside
+  val flatPlates = remember(platesPerSide) {
+    platesPerSide.flatMap { item -> List(item.quantity) { item.plate } }
+  }
+
   Surface(
     modifier = modifier
       .fillMaxWidth()
       .testTag("barbell_canvas_section"),
     shape = RoundedCornerShape(28.dp),
     color = MaterialTheme.colorScheme.surface,
-    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+    border = androidx.compose.foundation.BorderStroke(
+      1.dp,
+      MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+    ),
     tonalElevation = 0.dp
   ) {
     Column(
@@ -86,7 +100,7 @@ fun BarbellCanvasSection(
       ) {
         Column {
           Text(
-            text = if (isFullBar) "Full Barbell Load" else "One Sleeve (Loading Sequence)",
+            text = if (isFullBar) "Full Barbell Load" else "Sleeve Position Visualizer",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
@@ -130,11 +144,11 @@ fun BarbellCanvasSection(
 
       Spacer(modifier = Modifier.height(14.dp))
 
-      // Canvas Visualizer
+      // Canvas Visualizer with Position Markers
       Box(
         modifier = Modifier
           .fillMaxWidth()
-          .height(170.dp)
+          .height(195.dp)
           .clip(RoundedCornerShape(20.dp))
           .background(DarkSurfaceVariant)
           .border(1.dp, Slate700.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
@@ -142,70 +156,101 @@ fun BarbellCanvasSection(
         contentAlignment = Alignment.Center
       ) {
         if (isFullBar) {
-          FullBarbellCanvas(platesPerSide = platesPerSide)
+          FullBarbellCanvas(
+            platesPerSide = platesPerSide,
+            selectedPlateIndex = selectedPlateIndex
+          )
         } else {
-          SingleSleeveCanvas(platesPerSide = platesPerSide)
+          SingleSleeveCanvas(
+            platesPerSide = platesPerSide,
+            selectedPlateIndex = selectedPlateIndex,
+            onPlateClicked = { index ->
+              selectedPlateIndex = if (selectedPlateIndex == index) null else index
+            }
+          )
         }
       }
 
-      Spacer(modifier = Modifier.height(10.dp))
+      Spacer(modifier = Modifier.height(14.dp))
 
-      // Plate sequence badges
-      if (platesPerSide.isNotEmpty()) {
-        Row(
+      // Sleeve Loading Guide & Position Sequence Cards
+      if (flatPlates.isNotEmpty()) {
+        Column(
           modifier = Modifier.fillMaxWidth(),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(6.dp)
+          verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-          Text(
-            text = "Inside ➔",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-          )
-
           Row(
-            modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            // Expand each plate multiplier to individual badge items
-            val allSinglePlates = platesPerSide.flatMap { item ->
-              List(item.quantity) { item.plate }
-            }
-
-            allSinglePlates.take(8).forEach { plate ->
-              Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = plate.color,
-                modifier = Modifier.border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-              ) {
-                Text(
-                  text = plate.formattedWeight,
-                  style = MaterialTheme.typography.labelSmall,
-                  fontWeight = FontWeight.Bold,
-                  color = plate.textColor,
-                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                  fontSize = 11.sp
-                )
-              }
-            }
-
-            if (allSinglePlates.size > 8) {
+            Text(
+              text = "Sleeve Loading Sequence",
+              style = MaterialTheme.typography.titleSmall,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.onSurface
+            )
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
               Text(
-                text = "+${allSinglePlates.size - 8} more",
+                text = "Inside Flange",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 10.sp
+              )
+              Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(12.dp)
+              )
+              Text(
+                text = "Outside Collar",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.sp
               )
             }
           }
 
-          Text(
-            text = "➔ Outside",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
+          LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            itemsIndexed(flatPlates) { index, plate ->
+              val positionNumber = index + 1
+              val isSelected = selectedPlateIndex == index
+              val positionName = when (index) {
+                0 -> "Position #1 (Innermost)"
+                flatPlates.size - 1 -> "Position #$positionNumber (Outermost)"
+                else -> "Position #$positionNumber"
+              }
+              val cumulativeWeight = flatPlates.take(index + 1).sumOf { it.weight }
+
+              SleevePositionCard(
+                positionNumber = positionNumber,
+                positionName = positionName,
+                plate = plate,
+                cumulativeWeight = cumulativeWeight,
+                unit = unit,
+                isSelected = isSelected,
+                onClick = {
+                  selectedPlateIndex = if (isSelected) null else index
+                }
+              )
+            }
+
+            // Collar Clamp Card at the end of the sleeve
+            item {
+              CollarClampPositionCard(
+                totalPlatesCount = flatPlates.size
+              )
+            }
+          }
         }
       } else {
         Row(
@@ -221,7 +266,7 @@ fun BarbellCanvasSection(
           )
           Spacer(modifier = Modifier.width(6.dp))
           Text(
-            text = "Empty bar — no plates required for this weight",
+            text = "Empty Barbell — Sleeves bare with zero plates loaded",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -232,33 +277,229 @@ fun BarbellCanvasSection(
 }
 
 @Composable
+private fun SleevePositionCard(
+  positionNumber: Int,
+  positionName: String,
+  plate: Plate,
+  cumulativeWeight: Double,
+  unit: WeightUnit,
+  isSelected: Boolean,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier
+) {
+  Surface(
+    shape = RoundedCornerShape(16.dp),
+    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+    border = androidx.compose.foundation.BorderStroke(
+      if (isSelected) 2.dp else 1.dp,
+      if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+    ),
+    modifier = modifier
+      .clip(RoundedCornerShape(16.dp))
+      .clickable(onClick = onClick)
+      .testTag("sleeve_position_card_$positionNumber")
+  ) {
+    Column(
+      modifier = Modifier
+        .width(135.dp)
+        .padding(10.dp),
+      verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Surface(
+          shape = RoundedCornerShape(6.dp),
+          color = MaterialTheme.colorScheme.primary
+        ) {
+          Text(
+            text = "#$positionNumber",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            fontSize = 10.sp
+          )
+        }
+
+        Text(
+          text = if (positionNumber == 1) "Slide 1st" else "Slide #${positionNumber}",
+          style = MaterialTheme.typography.labelSmall,
+          fontWeight = FontWeight.Medium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          fontSize = 10.sp
+        )
+      }
+
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        Box(
+          modifier = Modifier
+            .size(32.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(plate.color)
+            .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(8.dp)),
+          contentAlignment = Alignment.Center
+        ) {
+          Text(
+            text = plate.formattedWeight,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Black,
+            color = plate.textColor,
+            fontSize = 11.sp
+          )
+        }
+
+        Column {
+          Text(
+            text = "${plate.formattedWeight} ${unit.shortLabel}",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+          )
+          Text(
+            text = "Total: ${unit.formatPlain(cumulativeWeight)}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 10.sp
+          )
+        }
+      }
+
+      Text(
+        text = if (positionNumber == 1) "Flush to Flange" else "Locks against #$positionNumber",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+        fontSize = 9.sp
+      )
+    }
+  }
+}
+
+@Composable
+private fun CollarClampPositionCard(
+  totalPlatesCount: Int,
+  modifier: Modifier = Modifier
+) {
+  Surface(
+    shape = RoundedCornerShape(16.dp),
+    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+    border = androidx.compose.foundation.BorderStroke(
+      1.dp,
+      MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    ),
+    modifier = modifier.width(130.dp)
+  ) {
+    Column(
+      modifier = Modifier.padding(10.dp),
+      verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Surface(
+          shape = RoundedCornerShape(6.dp),
+          color = Color(0xFFDC2626)
+        ) {
+          Text(
+            text = "COLLAR",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            fontSize = 9.sp
+          )
+        }
+
+        Text(
+          text = "Outer Lock",
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          fontSize = 10.sp
+        )
+      }
+
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        Box(
+          modifier = Modifier
+            .size(32.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFF475569)),
+          contentAlignment = Alignment.Center
+        ) {
+          Icon(
+            imageVector = Icons.Default.Lock,
+            contentDescription = null,
+            tint = Color(0xFFEF4444),
+            modifier = Modifier.size(18.dp)
+          )
+        }
+
+        Column {
+          Text(
+            text = "Spring Clamp",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+          )
+          Text(
+            text = "Locks load",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 10.sp
+          )
+        }
+      }
+
+      Text(
+        text = "Clamp against plate #$totalPlatesCount",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+        fontSize = 9.sp
+      )
+    }
+  }
+}
+
+@Composable
 fun SingleSleeveCanvas(
   platesPerSide: List<PlateCount>,
+  selectedPlateIndex: Int? = null,
+  onPlateClicked: ((Int) -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
   Canvas(
     modifier = modifier
       .fillMaxWidth()
-      .height(150.dp)
+      .height(175.dp)
       .testTag("single_sleeve_canvas")
   ) {
     val canvasW = size.width
     val canvasH = size.height
-    val centerY = canvasH / 2f
+    val centerY = canvasH * 0.52f
 
     // Shaft & Sleeve geometry
-    val shaftWidth = canvasW * 0.15f
+    val shaftWidth = canvasW * 0.12f
     val shaftHeight = 16.dp.toPx()
     val flangeWidth = 14.dp.toPx()
-    val flangeHeight = 60.dp.toPx()
-    val sleeveWidth = canvasW * 0.72f
+    val flangeHeight = 64.dp.toPx()
+    val sleeveWidth = canvasW * 0.74f
     val sleeveHeight = 32.dp.toPx()
 
-    val startX = 16.dp.toPx()
+    val startX = 14.dp.toPx()
     val flangeX = startX + shaftWidth
     val sleeveStartX = flangeX + flangeWidth
 
-    // 1. Draw Knurled Inner Shaft
+    // 1. Draw Knurled Inner Shaft (Barbell Center)
     drawRect(
       brush = Brush.verticalGradient(
         colors = listOf(Color(0xFF94A3B8), Color(0xFF64748B), Color(0xFF334155)),
@@ -270,15 +511,15 @@ fun SingleSleeveCanvas(
     )
 
     // Shaft knurling texture stripes
-    var knurlX = startX + 4.dp.toPx()
-    while (knurlX < flangeX - 4.dp.toPx()) {
+    var knurlX = startX + 3.dp.toPx()
+    while (knurlX < flangeX - 3.dp.toPx()) {
       drawLine(
-        color = Color(0x44FFFFFF),
-        start = Offset(knurlX, centerY - shaftHeight / 2 + 2),
-        end = Offset(knurlX, centerY + shaftHeight / 2 - 2),
-        strokeWidth = 1.5f
+        color = Color(0x33FFFFFF),
+        start = Offset(knurlX, centerY - shaftHeight / 2 + 1),
+        end = Offset(knurlX, centerY + shaftHeight / 2 - 1),
+        strokeWidth = 1.2f
       )
-      knurlX += 4.dp.toPx()
+      knurlX += 3.5.dp.toPx()
     }
 
     // 2. Draw Inside Collar Flange / Stopper
@@ -293,7 +534,22 @@ fun SingleSleeveCanvas(
       cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
     )
 
-    // 3. Draw Steel Rotating Sleeve (Barbell post)
+    // Flange label above
+    val flangePaint = android.graphics.Paint().apply {
+      color = android.graphics.Color.argb(200, 203, 213, 225)
+      textSize = 20f
+      isFakeBoldText = true
+      textAlign = android.graphics.Paint.Align.CENTER
+      isAntiAlias = true
+    }
+    drawContext.canvas.nativeCanvas.drawText(
+      "FLANGE",
+      flangeX + flangeWidth / 2f,
+      centerY - flangeHeight / 2 - 6.dp.toPx(),
+      flangePaint
+    )
+
+    // 3. Draw Steel Rotating Sleeve
     drawRoundRect(
       brush = Brush.verticalGradient(
         colors = listOf(Color(0xFFF1F5F9), Color(0xFFCBD5E1), Color(0xFF64748B), Color(0xFF475569)),
@@ -305,31 +561,68 @@ fun SingleSleeveCanvas(
       cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
     )
 
-    // Sleeve ridges / grooves
+    // Sleeve ridges
     drawLine(
-      color = Color(0x33000000),
+      color = Color(0x22000000),
       start = Offset(sleeveStartX, centerY - sleeveHeight / 2 + 6.dp.toPx()),
       end = Offset(sleeveStartX + sleeveWidth - 4.dp.toPx(), centerY - sleeveHeight / 2 + 6.dp.toPx()),
       strokeWidth = 1.5f
     )
     drawLine(
-      color = Color(0x33000000),
+      color = Color(0x22000000),
       start = Offset(sleeveStartX, centerY + sleeveHeight / 2 - 6.dp.toPx()),
       end = Offset(sleeveStartX + sleeveWidth - 4.dp.toPx(), centerY + sleeveHeight / 2 - 6.dp.toPx()),
       strokeWidth = 1.5f
     )
 
-    // 4. Draw Loaded Plates sequentially from flange outwards
+    // 4. Draw Loaded Plates sequentially from flange outwards with Position Numbers
     val flatPlates = platesPerSide.flatMap { item -> List(item.quantity) { item.plate } }
     var currentX = sleeveStartX + 2.dp.toPx()
-    val maxPlateHeight = 120.dp.toPx()
+    val maxPlateHeight = 115.dp.toPx()
     val minPlateThickness = 14.dp.toPx()
     val maxPlateThickness = 28.dp.toPx()
 
-    for (plate in flatPlates) {
+    flatPlates.forEachIndexed { index, plate ->
       val plateHeight = maxPlateHeight * plate.heightRatio
       val plateThickness = minPlateThickness + (maxPlateThickness - minPlateThickness) * plate.thicknessFraction
       val plateTopY = centerY - plateHeight / 2
+      val isSelected = selectedPlateIndex == index
+      val positionNum = index + 1
+
+      // Position callout badge above plate
+      val badgeCenter = currentX + plateThickness / 2f
+      val badgeY = plateTopY - 14.dp.toPx()
+
+      // Vertical connector tick line from badge to plate
+      drawLine(
+        color = if (isSelected) Color(0xFFFFD54F) else Color(0x88FFFFFF),
+        start = Offset(badgeCenter, badgeY + 6.dp.toPx()),
+        end = Offset(badgeCenter, plateTopY - 1.dp.toPx()),
+        strokeWidth = if (isSelected) 2.dp.toPx() else 1.dp.toPx()
+      )
+
+      // Badge pill
+      val badgeBgColor = if (isSelected) Color(0xFFFFB300) else Color(0xFF1E293B)
+      drawRoundRect(
+        color = badgeBgColor,
+        topLeft = Offset(badgeCenter - 10.dp.toPx(), badgeY - 7.dp.toPx()),
+        size = Size(20.dp.toPx(), 14.dp.toPx()),
+        cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
+      )
+
+      val badgePaint = android.graphics.Paint().apply {
+        color = if (isSelected) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+        textSize = 20f
+        isFakeBoldText = true
+        textAlign = android.graphics.Paint.Align.CENTER
+        isAntiAlias = true
+      }
+      drawContext.canvas.nativeCanvas.drawText(
+        "#$positionNum",
+        badgeCenter,
+        badgeY + 4.dp.toPx(),
+        badgePaint
+      )
 
       // Outer plate shadow / 3D edge
       drawRoundRect(
@@ -355,17 +648,17 @@ fun SingleSleeveCanvas(
         cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
       )
 
-      // Plate border rim
+      // Selection glow border or standard rim
       drawRoundRect(
-        color = Color(0x44FFFFFF),
+        color = if (isSelected) Color(0xFFFFD54F) else Color(0x44FFFFFF),
         topLeft = Offset(currentX, plateTopY),
         size = Size(plateThickness, plateHeight),
         cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()),
-        style = Stroke(width = 1.2.dp.toPx())
+        style = Stroke(width = if (isSelected) 2.5.dp.toPx() else 1.2.dp.toPx())
       )
 
       // Center Chrome Hub / Hole
-      val hubH = 34.dp.toPx()
+      val hubH = 32.dp.toPx()
       drawRect(
         brush = Brush.verticalGradient(
           colors = listOf(Color(0xFFE2E8F0), Color(0xFF94A3B8), Color(0xFF64748B)),
@@ -379,14 +672,14 @@ fun SingleSleeveCanvas(
       // Weight label text on plate
       val paint = android.graphics.Paint().apply {
         color = plate.textColor.toArgb()
-        textSize = if (plateHeight > 80.dp.toPx()) 30f else 22f
+        textSize = if (plateHeight > 80.dp.toPx()) 28f else 20f
         isFakeBoldText = true
         textAlign = android.graphics.Paint.Align.CENTER
         isAntiAlias = true
       }
 
       val textX = currentX + plateThickness / 2f
-      val textY = plateTopY + 22.dp.toPx()
+      val textY = plateTopY + 20.dp.toPx()
       drawContext.canvas.nativeCanvas.drawText(plate.formattedWeight, textX, textY, paint)
 
       currentX += plateThickness + 2.dp.toPx()
@@ -413,18 +706,72 @@ fun SingleSleeveCanvas(
         size = Size(6.dp.toPx(), 10.dp.toPx()),
         cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
       )
+
+      // Label above collar
+      val collarPaint = android.graphics.Paint().apply {
+        color = android.graphics.Color.argb(220, 239, 68, 68)
+        textSize = 18f
+        isFakeBoldText = true
+        textAlign = android.graphics.Paint.Align.CENTER
+        isAntiAlias = true
+      }
+      drawContext.canvas.nativeCanvas.drawText(
+        "LOCK",
+        currentX + collarWidth / 2f,
+        centerY - collarHeight / 2 - 12.dp.toPx(),
+        collarPaint
+      )
     }
 
     // End Cap of barbell sleeve
+    val endCapX = sleeveStartX + sleeveWidth - 4.dp.toPx()
     drawRoundRect(
       brush = Brush.verticalGradient(
         colors = listOf(Color(0xFFCBD5E1), Color(0xFF475569)),
         startY = centerY - sleeveHeight / 2,
         endY = centerY + sleeveHeight / 2
       ),
-      topLeft = Offset(sleeveStartX + sleeveWidth - 4.dp.toPx(), centerY - sleeveHeight / 2),
+      topLeft = Offset(endCapX, centerY - sleeveHeight / 2),
       size = Size(6.dp.toPx(), sleeveHeight),
       cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
+    )
+
+    // Sleeve Tip label
+    val tipPaint = android.graphics.Paint().apply {
+      color = android.graphics.Color.argb(160, 148, 163, 184)
+      textSize = 18f
+      isFakeBoldText = true
+      textAlign = android.graphics.Paint.Align.RIGHT
+      isAntiAlias = true
+    }
+    drawContext.canvas.nativeCanvas.drawText(
+      "SLEEVE TIP",
+      sleeveStartX + sleeveWidth,
+      centerY + sleeveHeight / 2 + 16.dp.toPx(),
+      tipPaint
+    )
+
+    // Loading direction bottom guide ruler
+    val guideY = centerY + 62.dp.toPx()
+    drawLine(
+      color = Color(0x33FFFFFF),
+      start = Offset(flangeX, guideY),
+      end = Offset(sleeveStartX + sleeveWidth, guideY),
+      strokeWidth = 1.dp.toPx()
+    )
+
+    val guidePaint = android.graphics.Paint().apply {
+      color = android.graphics.Color.argb(180, 148, 163, 184)
+      textSize = 19f
+      isFakeBoldText = true
+      textAlign = android.graphics.Paint.Align.LEFT
+      isAntiAlias = true
+    }
+    drawContext.canvas.nativeCanvas.drawText(
+      "◄ INMOST (#1)  ───────────────────────►  OUTMOST",
+      flangeX,
+      guideY + 14.dp.toPx(),
+      guidePaint
     )
   }
 }
@@ -432,17 +779,18 @@ fun SingleSleeveCanvas(
 @Composable
 fun FullBarbellCanvas(
   platesPerSide: List<PlateCount>,
+  selectedPlateIndex: Int? = null,
   modifier: Modifier = Modifier
 ) {
   Canvas(
     modifier = modifier
       .fillMaxWidth()
-      .height(150.dp)
+      .height(175.dp)
       .testTag("full_barbell_canvas")
   ) {
     val canvasW = size.width
     val canvasH = size.height
-    val centerY = canvasH / 2f
+    val centerY = canvasH * 0.52f
 
     val totalBarWidth = canvasW * 0.94f
     val barStartX = (canvasW - totalBarWidth) / 2f
@@ -455,7 +803,6 @@ fun FullBarbellCanvas(
 
     val leftSleeveEnd = barStartX + sleeveWidth
     val rightSleeveStart = leftSleeveEnd + centerShaftWidth
-    val rightSleeveEnd = rightSleeveStart + sleeveWidth
 
     // 1. Draw Center Shaft
     drawRect(
@@ -468,23 +815,35 @@ fun FullBarbellCanvas(
       size = Size(centerShaftWidth, shaftHeight)
     )
 
-    // Center knurling sections
-    val knurlSectionW = centerShaftWidth * 0.25f
-    // Left knurl
+    // Center bar mark & knurling sections
+    val knurlSectionW = centerShaftWidth * 0.22f
     drawRect(
       color = Color(0x33FFFFFF),
       topLeft = Offset(leftSleeveEnd + centerShaftWidth * 0.15f, centerY - shaftHeight / 2),
       size = Size(knurlSectionW, shaftHeight)
     )
-    // Right knurl
     drawRect(
       color = Color(0x33FFFFFF),
       topLeft = Offset(rightSleeveStart - centerShaftWidth * 0.15f - knurlSectionW, centerY - shaftHeight / 2),
       size = Size(knurlSectionW, shaftHeight)
     )
 
+    // Center Shaft Label
+    val centerPaint = android.graphics.Paint().apply {
+      color = android.graphics.Color.argb(160, 203, 213, 225)
+      textSize = 18f
+      isFakeBoldText = true
+      textAlign = android.graphics.Paint.Align.CENTER
+      isAntiAlias = true
+    }
+    drawContext.canvas.nativeCanvas.drawText(
+      "BARBELL SHAFT",
+      leftSleeveEnd + centerShaftWidth / 2f,
+      centerY + shaftHeight / 2 + 18.dp.toPx(),
+      centerPaint
+    )
+
     // 2. Draw Left and Right Sleeves
-    // Left sleeve
     drawRoundRect(
       brush = Brush.verticalGradient(
         colors = listOf(Color(0xFFE2E8F0), Color(0xFF64748B)),
@@ -495,7 +854,6 @@ fun FullBarbellCanvas(
       size = Size(sleeveWidth, sleeveHeight),
       cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
     )
-    // Right sleeve
     drawRoundRect(
       brush = Brush.verticalGradient(
         colors = listOf(Color(0xFFE2E8F0), Color(0xFF64748B)),
@@ -507,14 +865,13 @@ fun FullBarbellCanvas(
       cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
     )
 
-    // Left flange
+    // Flanges
     drawRoundRect(
       color = Color(0xFFCBD5E1),
       topLeft = Offset(leftSleeveEnd - flangeWidth, centerY - flangeHeight / 2),
       size = Size(flangeWidth, flangeHeight),
       cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
     )
-    // Right flange
     drawRoundRect(
       color = Color(0xFFCBD5E1),
       topLeft = Offset(rightSleeveStart, centerY - flangeHeight / 2),
@@ -522,18 +879,19 @@ fun FullBarbellCanvas(
       cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
     )
 
-    // 3. Draw Symmetrical Plates
+    // 3. Draw Symmetrical Plates with Position Labels
     val flatPlates = platesPerSide.flatMap { item -> List(item.quantity) { item.plate } }
-    val maxPlateHeight = 90.dp.toPx()
+    val maxPlateHeight = 85.dp.toPx()
     val minThick = 6.dp.toPx()
     val maxThick = 12.dp.toPx()
 
-    // Draw Left Sleeve Plates (inside collar moving leftwards)
+    // Left Sleeve Plates (Inside Collar moving leftwards)
     var leftPlateX = leftSleeveEnd - flangeWidth - 2.dp.toPx()
-    for (plate in flatPlates) {
+    flatPlates.forEachIndexed { index, plate ->
       val pH = maxPlateHeight * plate.heightRatio
       val pW = minThick + (maxThick - minThick) * plate.thicknessFraction
       leftPlateX -= pW
+      val isSelected = selectedPlateIndex == index
 
       drawRoundRect(
         color = plate.color,
@@ -542,20 +900,37 @@ fun FullBarbellCanvas(
         cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
       )
       drawRoundRect(
-        color = Color(0x44FFFFFF),
+        color = if (isSelected) Color(0xFFFFD54F) else Color(0x44FFFFFF),
         topLeft = Offset(leftPlateX, centerY - pH / 2),
         size = Size(pW, pH),
         cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
-        style = Stroke(width = 1.dp.toPx())
+        style = Stroke(width = if (isSelected) 2.dp.toPx() else 1.dp.toPx())
       )
+
+      // Position callout above plate
+      val numPaint = android.graphics.Paint().apply {
+        color = android.graphics.Color.WHITE
+        textSize = 16f
+        isFakeBoldText = true
+        textAlign = android.graphics.Paint.Align.CENTER
+        isAntiAlias = true
+      }
+      drawContext.canvas.nativeCanvas.drawText(
+        "${index + 1}",
+        leftPlateX + pW / 2f,
+        centerY - pH / 2 - 4.dp.toPx(),
+        numPaint
+      )
+
       leftPlateX -= 1.dp.toPx()
     }
 
-    // Draw Right Sleeve Plates (inside collar moving rightwards)
+    // Right Sleeve Plates (Inside Collar moving rightwards)
     var rightPlateX = rightSleeveStart + flangeWidth + 2.dp.toPx()
-    for (plate in flatPlates) {
+    flatPlates.forEachIndexed { index, plate ->
       val pH = maxPlateHeight * plate.heightRatio
       val pW = minThick + (maxThick - minThick) * plate.thicknessFraction
+      val isSelected = selectedPlateIndex == index
 
       drawRoundRect(
         color = plate.color,
@@ -564,13 +939,50 @@ fun FullBarbellCanvas(
         cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
       )
       drawRoundRect(
-        color = Color(0x44FFFFFF),
+        color = if (isSelected) Color(0xFFFFD54F) else Color(0x44FFFFFF),
         topLeft = Offset(rightPlateX, centerY - pH / 2),
         size = Size(pW, pH),
         cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx()),
-        style = Stroke(width = 1.dp.toPx())
+        style = Stroke(width = if (isSelected) 2.dp.toPx() else 1.dp.toPx())
       )
+
+      // Position callout above plate
+      val numPaint = android.graphics.Paint().apply {
+        color = android.graphics.Color.WHITE
+        textSize = 16f
+        isFakeBoldText = true
+        textAlign = android.graphics.Paint.Align.CENTER
+        isAntiAlias = true
+      }
+      drawContext.canvas.nativeCanvas.drawText(
+        "${index + 1}",
+        rightPlateX + pW / 2f,
+        centerY - pH / 2 - 4.dp.toPx(),
+        numPaint
+      )
+
       rightPlateX += pW + 1.dp.toPx()
     }
+
+    // Sleeve labels at bottom
+    val sidePaint = android.graphics.Paint().apply {
+      color = android.graphics.Color.argb(160, 148, 163, 184)
+      textSize = 18f
+      isFakeBoldText = true
+      textAlign = android.graphics.Paint.Align.CENTER
+      isAntiAlias = true
+    }
+    drawContext.canvas.nativeCanvas.drawText(
+      "LEFT SLEEVE",
+      barStartX + sleeveWidth / 2f,
+      centerY + sleeveHeight / 2 + 18.dp.toPx(),
+      sidePaint
+    )
+    drawContext.canvas.nativeCanvas.drawText(
+      "RIGHT SLEEVE",
+      rightSleeveStart + sleeveWidth / 2f,
+      centerY + sleeveHeight / 2 + 18.dp.toPx(),
+      sidePaint
+    )
   }
 }

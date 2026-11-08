@@ -1,17 +1,27 @@
 package com.example.ui
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.calculator.BarbellCalculator
+import com.example.data.AppDatabase
+import com.example.data.entity.LoadingPlanEntity
+import com.example.data.repository.LoadingPlanRepository
 import com.example.model.BarType
 import com.example.model.Plate
 import com.example.model.PlateCalculationResult
 import com.example.model.PlateCount
 import com.example.model.WarmupSet
 import com.example.model.WeightUnit
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 data class BarbellUiState(
   val targetWeight: Double = 135.0,
@@ -37,10 +47,25 @@ data class BarbellUiState(
   val activeTab: Int = 0 // 0: Plate Calculator, 1: Warm-up Ladder, 2: Reverse Racker
 )
 
-class BarbellViewModel : ViewModel() {
+class BarbellViewModel @JvmOverloads constructor(
+  application: Application,
+  customRepository: LoadingPlanRepository? = null
+) : AndroidViewModel(application) {
+
+  private val repository: LoadingPlanRepository = customRepository
+    ?: LoadingPlanRepository(AppDatabase.getInstance(application).loadingPlanDao())
+
+  val recentPlans: StateFlow<List<LoadingPlanEntity>> = repository.recentPlans
+    .stateIn(
+      scope = viewModelScope,
+      started = SharingStarted.WhileSubscribed(5000),
+      initialValue = emptyList()
+    )
 
   private val _uiState = MutableStateFlow(BarbellUiState())
   val uiState: StateFlow<BarbellUiState> = _uiState.asStateFlow()
+
+  private var autoSaveJob: Job? = null
 
   init {
     recalculate()
@@ -147,6 +172,44 @@ class BarbellViewModel : ViewModel() {
     recalculate()
   }
 
+  // Load a previously saved plan from Room database
+  fun loadPlan(plan: LoadingPlanEntity) {
+    val unit = if (plan.unit == "KG") WeightUnit.KG else WeightUnit.LBS
+    val bar = BarType.ALL_PRESETS.firstOrNull { it.id == plan.barId }
+      ?: BarType(
+        id = plan.barId,
+        name = plan.barName,
+        weightLbs = plan.barWeight,
+        weightKg = plan.barWeight,
+        description = plan.barName,
+        isCustom = plan.barId == "custom"
+      )
+
+    _uiState.update {
+      it.copy(
+        targetWeight = plan.targetWeight,
+        unit = unit,
+        selectedBar = bar,
+        customBarWeight = plan.customBarWeight,
+        collarsEnabled = plan.collarsEnabled,
+        activeTab = 0
+      )
+    }
+    recalculate()
+  }
+
+  fun deleteHistoryPlan(id: Long) {
+    viewModelScope.launch {
+      repository.deletePlanById(id)
+    }
+  }
+
+  fun clearHistory() {
+    viewModelScope.launch {
+      repository.clearHistory()
+    }
+  }
+
   // Reverse Racker actions
   fun addReversePlate(plate: Plate) {
     val currentPlates = _uiState.value.reversePlatesPerSide.toMutableList()
@@ -232,6 +295,40 @@ class BarbellViewModel : ViewModel() {
     return if (state.unit == WeightUnit.LBS) state.collarsWeightLbs else state.collarsWeightKg
   }
 
+  private fun scheduleAutoSave() {
+    val state = _uiState.value
+    val result = state.calculationResult
+    if (result.targetWeight <= 0.0) return
+
+    autoSaveJob?.cancel()
+    autoSaveJob = viewModelScope.launch {
+      delay(800) // Debounce rapid adjustments
+      val currentState = _uiState.value
+      val currentResult = currentState.calculationResult
+      if (currentResult.targetWeight <= 0.0) return@launch
+
+      val platesSummary = currentResult.platesPerSide.joinToString(",") {
+        "${it.plate.weight}:${it.quantity}"
+      }
+
+      val entity = LoadingPlanEntity(
+        timestamp = System.currentTimeMillis(),
+        targetWeight = currentState.targetWeight,
+        achievedWeight = currentResult.achievedTotalWeight,
+        unit = currentState.unit.name,
+        barId = currentState.selectedBar.id,
+        barName = currentState.selectedBar.name,
+        barWeight = if (currentState.selectedBar.isCustom) currentState.customBarWeight else currentState.selectedBar.getWeight(currentState.unit),
+        customBarWeight = currentState.customBarWeight,
+        collarsEnabled = currentState.collarsEnabled,
+        platesSummary = platesSummary,
+        totalPlatesOnBar = currentResult.totalPlatesOnBar,
+        isExact = currentResult.isExact
+      )
+      repository.savePlan(entity)
+    }
+  }
+
   private fun recalculate() {
     val state = _uiState.value
     val barWeight = getEffectiveBarWeight()
@@ -267,5 +364,7 @@ class BarbellViewModel : ViewModel() {
         reverseTotalWeight = reverseTotal
       )
     }
+
+    scheduleAutoSave()
   }
 }

@@ -23,7 +23,8 @@ class GreetingScreenshotTest {
 
   @Test
   fun barbell_screenshot() {
-    val viewModel = BarbellViewModel()
+    val application = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = BarbellViewModel(application)
     composeTestRule.setContent {
       BarbellTheme {
         BarbellAppScreen(viewModel = viewModel)
