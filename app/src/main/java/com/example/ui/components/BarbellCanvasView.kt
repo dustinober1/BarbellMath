@@ -22,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.LabelOff
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -66,6 +68,8 @@ fun BarbellCanvasSection(
   barWeightFormatted: String,
   isFullBar: Boolean,
   onToggleFullBar: () -> Unit,
+  showPlateLabels: Boolean = true,
+  onTogglePlateLabels: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   var selectedPlateIndex by remember { mutableStateOf<Int?>(null) }
@@ -92,13 +96,13 @@ fun BarbellCanvasSection(
         .fillMaxWidth()
         .padding(20.dp)
     ) {
-      // Header with view switcher
+      // Header with view switcher & weight labels toggle
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Column {
+        Column(modifier = Modifier.weight(1f, fill = false)) {
           Text(
             text = if (isFullBar) "Full Barbell Load" else "Sleeve Position Visualizer",
             style = MaterialTheme.typography.titleMedium,
@@ -112,32 +116,71 @@ fun BarbellCanvasSection(
           )
         }
 
-        // Toggle button
-        Surface(
-          modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onToggleFullBar)
-            .testTag("toggle_bar_view_button"),
-          color = MaterialTheme.colorScheme.primaryContainer,
-          shape = RoundedCornerShape(12.dp)
+        Row(
+          horizontalArrangement = Arrangement.spacedBy(6.dp),
+          verticalAlignment = Alignment.CenterVertically
         ) {
-          Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+          // Plate Weight Labels Toggle button
+          Surface(
+            modifier = Modifier
+              .clip(RoundedCornerShape(12.dp))
+              .clickable(onClick = onTogglePlateLabels)
+              .testTag("toggle_plate_labels_button"),
+            color = if (showPlateLabels) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(12.dp),
+            border = if (showPlateLabels) {
+              androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+            } else null
           ) {
-            Icon(
-              imageVector = Icons.Default.AspectRatio,
-              contentDescription = "Toggle view",
-              modifier = Modifier.size(16.dp),
-              tint = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-            Text(
-              text = if (isFullBar) "Sleeve View" else "Full Bar",
-              style = MaterialTheme.typography.labelSmall,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
+            Row(
+              modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+              Icon(
+                imageVector = if (showPlateLabels) Icons.Default.Label else Icons.Default.LabelOff,
+                contentDescription = "Toggle Plate Weight Labels",
+                modifier = Modifier.size(15.dp),
+                tint = if (showPlateLabels) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+              )
+              Text(
+                text = if (showPlateLabels) "Labels ON" else "Labels OFF",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = if (showPlateLabels) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp
+              )
+            }
+          }
+
+          // Full Bar / Sleeve View Toggle button
+          Surface(
+            modifier = Modifier
+              .clip(RoundedCornerShape(12.dp))
+              .clickable(onClick = onToggleFullBar)
+              .testTag("toggle_bar_view_button"),
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            shape = RoundedCornerShape(12.dp)
+          ) {
+            Row(
+              modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+              Icon(
+                imageVector = Icons.Default.AspectRatio,
+                contentDescription = "Toggle view",
+                modifier = Modifier.size(15.dp),
+                tint = MaterialTheme.colorScheme.onSecondaryContainer
+              )
+              Text(
+                text = if (isFullBar) "Sleeve" else "Full Bar",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                fontSize = 11.sp
+              )
+            }
           }
         }
       }
@@ -158,16 +201,56 @@ fun BarbellCanvasSection(
         if (isFullBar) {
           FullBarbellCanvas(
             platesPerSide = platesPerSide,
-            selectedPlateIndex = selectedPlateIndex
+            selectedPlateIndex = selectedPlateIndex,
+            showWeightLabels = showPlateLabels,
+            unit = unit
           )
         } else {
           SingleSleeveCanvas(
             platesPerSide = platesPerSide,
             selectedPlateIndex = selectedPlateIndex,
+            showWeightLabels = showPlateLabels,
+            unit = unit,
             onPlateClicked = { index ->
               selectedPlateIndex = if (selectedPlateIndex == index) null else index
             }
           )
+        }
+
+        // Quick interactive indicator overlay in the visual barbell canvas
+        Surface(
+          modifier = Modifier
+            .align(Alignment.TopEnd)
+            .padding(4.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onTogglePlateLabels)
+            .testTag("canvas_overlay_label_toggle"),
+          color = Color(0xD90F172A),
+          shape = RoundedCornerShape(8.dp),
+          border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (showPlateLabels) Color(0xFF38BDF8).copy(alpha = 0.5f) else Color(0x33FFFFFF)
+          )
+        ) {
+          Row(
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+          ) {
+            Box(
+              modifier = Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(if (showPlateLabels) Color(0xFF22C55E) else Color(0xFF94A3B8))
+            )
+            Text(
+              text = if (showPlateLabels) "Labels ON" else "Labels OFF",
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.Medium,
+              color = if (showPlateLabels) Color(0xFFE2E8F0) else Color(0xFF94A3B8),
+              fontSize = 10.sp
+            )
+          }
         }
       }
 
@@ -474,6 +557,8 @@ private fun CollarClampPositionCard(
 fun SingleSleeveCanvas(
   platesPerSide: List<PlateCount>,
   selectedPlateIndex: Int? = null,
+  showWeightLabels: Boolean = true,
+  unit: WeightUnit = WeightUnit.LBS,
   onPlateClicked: ((Int) -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
@@ -603,22 +688,24 @@ fun SingleSleeveCanvas(
 
       // Badge pill
       val badgeBgColor = if (isSelected) Color(0xFFFFB300) else Color(0xFF1E293B)
+      val badgeW = if (showWeightLabels) 30.dp.toPx() else 20.dp.toPx()
       drawRoundRect(
         color = badgeBgColor,
-        topLeft = Offset(badgeCenter - 10.dp.toPx(), badgeY - 7.dp.toPx()),
-        size = Size(20.dp.toPx(), 14.dp.toPx()),
+        topLeft = Offset(badgeCenter - badgeW / 2f, badgeY - 7.dp.toPx()),
+        size = Size(badgeW, 14.dp.toPx()),
         cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
       )
 
       val badgePaint = android.graphics.Paint().apply {
         color = if (isSelected) android.graphics.Color.BLACK else android.graphics.Color.WHITE
-        textSize = 20f
+        textSize = if (showWeightLabels) 16f else 20f
         isFakeBoldText = true
         textAlign = android.graphics.Paint.Align.CENTER
         isAntiAlias = true
       }
+      val badgeLabel = if (showWeightLabels) "#$positionNum:${plate.formattedWeight}" else "#$positionNum"
       drawContext.canvas.nativeCanvas.drawText(
-        "#$positionNum",
+        badgeLabel,
         badgeCenter,
         badgeY + 4.dp.toPx(),
         badgePaint
@@ -669,18 +756,63 @@ fun SingleSleeveCanvas(
         size = Size(plateThickness - 2.dp.toPx(), hubH)
       )
 
-      // Weight label text on plate
-      val paint = android.graphics.Paint().apply {
-        color = plate.textColor.toArgb()
-        textSize = if (plateHeight > 80.dp.toPx()) 28f else 20f
-        isFakeBoldText = true
-        textAlign = android.graphics.Paint.Align.CENTER
-        isAntiAlias = true
-      }
+      // Weight label text inside plate (toggleable)
+      if (showWeightLabels) {
+        val isLargePlate = plateHeight > 75.dp.toPx()
+        val textX = currentX + plateThickness / 2f
+        val upperCenterY = (plateTopY + (centerY - hubH / 2)) / 2f
 
-      val textX = currentX + plateThickness / 2f
-      val textY = plateTopY + 20.dp.toPx()
-      drawContext.canvas.nativeCanvas.drawText(plate.formattedWeight, textX, textY, paint)
+        // High contrast backing pill for crystal clear readability at a glance
+        val pillW = (plateThickness - 2.dp.toPx()).coerceAtLeast(12.dp.toPx())
+        val pillH = if (isLargePlate) 18.dp.toPx() else 14.dp.toPx()
+        val pillBgColor = if (plate.textColor == Color.White) Color(0x55000000) else Color(0x40FFFFFF)
+
+        drawRoundRect(
+          color = pillBgColor,
+          topLeft = Offset(textX - pillW / 2f, upperCenterY - pillH / 2f),
+          size = Size(pillW, pillH),
+          cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
+        )
+
+        val paint = android.graphics.Paint().apply {
+          color = plate.textColor.toArgb()
+          textSize = if (isLargePlate) 24f else if (plateThickness >= 18.dp.toPx()) 19f else 15f
+          isFakeBoldText = true
+          textAlign = android.graphics.Paint.Align.CENTER
+          isAntiAlias = true
+        }
+
+        drawContext.canvas.nativeCanvas.drawText(
+          plate.formattedWeight,
+          textX,
+          upperCenterY + if (isLargePlate) 5.dp.toPx() else 4.dp.toPx(),
+          paint
+        )
+
+        // For tall bumper plates, also draw weight/unit at lower section like authentic gym plates
+        if (isLargePlate) {
+          val lowerCenterY = ((centerY + hubH / 2) + (plateTopY + plateHeight)) / 2f
+          drawRoundRect(
+            color = pillBgColor,
+            topLeft = Offset(textX - pillW / 2f, lowerCenterY - pillH / 2f),
+            size = Size(pillW, pillH),
+            cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
+          )
+          val unitPaint = android.graphics.Paint().apply {
+            color = plate.textColor.toArgb()
+            textSize = 15f
+            isFakeBoldText = true
+            textAlign = android.graphics.Paint.Align.CENTER
+            isAntiAlias = true
+          }
+          drawContext.canvas.nativeCanvas.drawText(
+            unit.shortLabel.uppercase(),
+            textX,
+            lowerCenterY + 4.dp.toPx(),
+            unitPaint
+          )
+        }
+      }
 
       currentX += plateThickness + 2.dp.toPx()
     }
@@ -780,6 +912,8 @@ fun SingleSleeveCanvas(
 fun FullBarbellCanvas(
   platesPerSide: List<PlateCount>,
   selectedPlateIndex: Int? = null,
+  showWeightLabels: Boolean = true,
+  unit: WeightUnit = WeightUnit.LBS,
   modifier: Modifier = Modifier
 ) {
   Canvas(
@@ -879,7 +1013,7 @@ fun FullBarbellCanvas(
       cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
     )
 
-    // 3. Draw Symmetrical Plates with Position Labels
+    // 3. Draw Symmetrical Plates with Position / Weight Labels
     val flatPlates = platesPerSide.flatMap { item -> List(item.quantity) { item.plate } }
     val maxPlateHeight = 85.dp.toPx()
     val minThick = 6.dp.toPx()
@@ -907,20 +1041,67 @@ fun FullBarbellCanvas(
         style = Stroke(width = if (isSelected) 2.dp.toPx() else 1.dp.toPx())
       )
 
-      // Position callout above plate
-      val numPaint = android.graphics.Paint().apply {
-        color = android.graphics.Color.WHITE
-        textSize = 16f
-        isFakeBoldText = true
-        textAlign = android.graphics.Paint.Align.CENTER
-        isAntiAlias = true
+      // Callout badge above plate (weight value or position)
+      val numCenter = leftPlateX + pW / 2f
+      val topY = centerY - pH / 2 - 4.dp.toPx()
+
+      if (showWeightLabels) {
+        val badgeW = (pW + 6.dp.toPx()).coerceAtLeast(18.dp.toPx())
+        drawRoundRect(
+          color = if (isSelected) Color(0xFFFFB300) else Color(0xDD1E293B),
+          topLeft = Offset(numCenter - badgeW / 2f, topY - 12.dp.toPx()),
+          size = Size(badgeW, 13.dp.toPx()),
+          cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
+        )
+        val numPaint = android.graphics.Paint().apply {
+          color = if (isSelected) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+          textSize = 14f
+          isFakeBoldText = true
+          textAlign = android.graphics.Paint.Align.CENTER
+          isAntiAlias = true
+        }
+        drawContext.canvas.nativeCanvas.drawText(
+          plate.formattedWeight,
+          numCenter,
+          topY - 2.dp.toPx(),
+          numPaint
+        )
+
+        // Inside plate weight text for larger plates in full bar view
+        if (pH >= 46.dp.toPx()) {
+          val insidePaint = android.graphics.Paint().apply {
+            color = plate.textColor.toArgb()
+            textSize = 12f
+            isFakeBoldText = true
+            textAlign = android.graphics.Paint.Align.CENTER
+            isAntiAlias = true
+          }
+          val insideCenterY = centerY - pH / 4f
+          drawContext.canvas.nativeCanvas.save()
+          drawContext.canvas.nativeCanvas.rotate(-90f, numCenter, insideCenterY)
+          drawContext.canvas.nativeCanvas.drawText(
+            plate.formattedWeight,
+            numCenter,
+            insideCenterY + 4f,
+            insidePaint
+          )
+          drawContext.canvas.nativeCanvas.restore()
+        }
+      } else {
+        val numPaint = android.graphics.Paint().apply {
+          color = android.graphics.Color.WHITE
+          textSize = 16f
+          isFakeBoldText = true
+          textAlign = android.graphics.Paint.Align.CENTER
+          isAntiAlias = true
+        }
+        drawContext.canvas.nativeCanvas.drawText(
+          "${index + 1}",
+          numCenter,
+          topY,
+          numPaint
+        )
       }
-      drawContext.canvas.nativeCanvas.drawText(
-        "${index + 1}",
-        leftPlateX + pW / 2f,
-        centerY - pH / 2 - 4.dp.toPx(),
-        numPaint
-      )
 
       leftPlateX -= 1.dp.toPx()
     }
@@ -946,20 +1127,67 @@ fun FullBarbellCanvas(
         style = Stroke(width = if (isSelected) 2.dp.toPx() else 1.dp.toPx())
       )
 
-      // Position callout above plate
-      val numPaint = android.graphics.Paint().apply {
-        color = android.graphics.Color.WHITE
-        textSize = 16f
-        isFakeBoldText = true
-        textAlign = android.graphics.Paint.Align.CENTER
-        isAntiAlias = true
+      // Callout badge above plate (weight value or position)
+      val numCenter = rightPlateX + pW / 2f
+      val topY = centerY - pH / 2 - 4.dp.toPx()
+
+      if (showWeightLabels) {
+        val badgeW = (pW + 6.dp.toPx()).coerceAtLeast(18.dp.toPx())
+        drawRoundRect(
+          color = if (isSelected) Color(0xFFFFB300) else Color(0xDD1E293B),
+          topLeft = Offset(numCenter - badgeW / 2f, topY - 12.dp.toPx()),
+          size = Size(badgeW, 13.dp.toPx()),
+          cornerRadius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
+        )
+        val numPaint = android.graphics.Paint().apply {
+          color = if (isSelected) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+          textSize = 14f
+          isFakeBoldText = true
+          textAlign = android.graphics.Paint.Align.CENTER
+          isAntiAlias = true
+        }
+        drawContext.canvas.nativeCanvas.drawText(
+          plate.formattedWeight,
+          numCenter,
+          topY - 2.dp.toPx(),
+          numPaint
+        )
+
+        // Inside plate weight text for larger plates in full bar view
+        if (pH >= 46.dp.toPx()) {
+          val insidePaint = android.graphics.Paint().apply {
+            color = plate.textColor.toArgb()
+            textSize = 12f
+            isFakeBoldText = true
+            textAlign = android.graphics.Paint.Align.CENTER
+            isAntiAlias = true
+          }
+          val insideCenterY = centerY - pH / 4f
+          drawContext.canvas.nativeCanvas.save()
+          drawContext.canvas.nativeCanvas.rotate(-90f, numCenter, insideCenterY)
+          drawContext.canvas.nativeCanvas.drawText(
+            plate.formattedWeight,
+            numCenter,
+            insideCenterY + 4f,
+            insidePaint
+          )
+          drawContext.canvas.nativeCanvas.restore()
+        }
+      } else {
+        val numPaint = android.graphics.Paint().apply {
+          color = android.graphics.Color.WHITE
+          textSize = 16f
+          isFakeBoldText = true
+          textAlign = android.graphics.Paint.Align.CENTER
+          isAntiAlias = true
+        }
+        drawContext.canvas.nativeCanvas.drawText(
+          "${index + 1}",
+          numCenter,
+          topY,
+          numPaint
+        )
       }
-      drawContext.canvas.nativeCanvas.drawText(
-        "${index + 1}",
-        rightPlateX + pW / 2f,
-        centerY - pH / 2 - 4.dp.toPx(),
-        numPaint
-      )
 
       rightPlateX += pW + 1.dp.toPx()
     }

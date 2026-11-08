@@ -301,7 +301,9 @@ fun BarbellAppScreen(
             barName = uiState.selectedBar.name,
             barWeightFormatted = uiState.unit.format(effectiveBarWeight),
             isFullBar = uiState.isFullBarView,
-            onToggleFullBar = { viewModel.toggleFullBarView() }
+            onToggleFullBar = { viewModel.toggleFullBarView() },
+            showPlateLabels = uiState.showPlateLabels,
+            onTogglePlateLabels = { viewModel.togglePlateLabels() }
           )
         }
 

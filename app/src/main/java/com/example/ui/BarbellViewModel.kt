@@ -44,6 +44,7 @@ data class BarbellUiState(
   val reversePlatesPerSide: List<PlateCount> = emptyList(),
   val reverseTotalWeight: Double = 45.0,
   val isFullBarView: Boolean = false,
+  val showPlateLabels: Boolean = true,
   val activeTab: Int = 0 // 0: Plate Calculator, 1: Warm-up Ladder, 2: Reverse Racker
 )
 
@@ -121,6 +122,14 @@ class BarbellViewModel @JvmOverloads constructor(
 
   fun toggleFullBarView() {
     _uiState.update { it.copy(isFullBarView = !it.isFullBarView) }
+  }
+
+  fun togglePlateLabels() {
+    _uiState.update { it.copy(showPlateLabels = !it.showPlateLabels) }
+  }
+
+  fun setShowPlateLabels(show: Boolean) {
+    _uiState.update { it.copy(showPlateLabels = show) }
   }
 
   fun setActiveTab(tabIndex: Int) {

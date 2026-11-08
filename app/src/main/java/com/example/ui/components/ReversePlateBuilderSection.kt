@@ -126,7 +126,10 @@ fun ReversePlateBuilderSection(
           .padding(8.dp),
         contentAlignment = Alignment.Center
       ) {
-        SingleSleeveCanvas(platesPerSide = reversePlatesPerSide)
+        SingleSleeveCanvas(
+          platesPerSide = reversePlatesPerSide,
+          unit = unit
+        )
       }
 
       Spacer(modifier = Modifier.height(14.dp))
