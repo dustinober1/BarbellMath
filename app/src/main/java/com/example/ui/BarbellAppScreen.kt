@@ -401,6 +401,7 @@ fun BarbellAppScreen(
         item {
           PlateBreakdownCard(
             result = uiState.calculationResult,
+            availablePlates = activePlates,
             onOpenInventorySettings = { viewModel.setActiveTab(4) },
             onSaveSession = { isSaveSessionDialogOpen = true }
           )
@@ -582,7 +583,8 @@ fun BarbellAppScreen(
         )
         isSaveSessionDialogOpen = false
         coroutineScope.launch {
-          snackbarHostState.showSnackbar("Saved $formattedLoad ($liftName) to Recent Sessions")
+          val repsSuffix = if (reps.isNotBlank()) " • $reps" else ""
+          snackbarHostState.showSnackbar("Logged $formattedLoad$repsSuffix ($liftName) to history")
         }
       }
     )

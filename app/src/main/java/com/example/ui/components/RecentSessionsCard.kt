@@ -34,12 +34,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -136,14 +138,28 @@ fun RecentSessionsCard(
         }
 
         if (sessions.isNotEmpty()) {
-          TextButton(
-            onClick = onViewAllSessions,
-            modifier = Modifier.testTag("view_all_sessions_button")
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
           ) {
-            Text(
-              text = "View All",
-              fontWeight = FontWeight.Bold
-            )
+            TextButton(
+              onClick = onSaveCurrentSession,
+              modifier = Modifier.testTag("header_log_session_button")
+            ) {
+              Text(
+                text = "+ Log",
+                fontWeight = FontWeight.Bold
+              )
+            }
+            TextButton(
+              onClick = onViewAllSessions,
+              modifier = Modifier.testTag("view_all_sessions_button")
+            ) {
+              Text(
+                text = "View All",
+                fontWeight = FontWeight.Bold
+              )
+            }
           }
         }
       }
@@ -164,7 +180,7 @@ fun RecentSessionsCard(
             verticalArrangement = Arrangement.spacedBy(10.dp)
           ) {
             Text(
-              text = "No sessions saved yet. Log your current barbell setup to start tracking weight progression over time.",
+              text = "No sessions saved yet. Log your sets, reps, and barbell load to track lifting history over time.",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -178,7 +194,7 @@ fun RecentSessionsCard(
                 modifier = Modifier.size(18.dp)
               )
               Spacer(modifier = Modifier.width(6.dp))
-              Text("Save Current Load", fontWeight = FontWeight.Bold)
+              Text("Log Sets & Reps", fontWeight = FontWeight.Bold)
             }
           }
         }
@@ -375,6 +391,25 @@ fun WorkoutSessionRow(
             )
           }
 
+          if (session.reps.isNotBlank()) {
+            Surface(
+              shape = RoundedCornerShape(8.dp),
+              color = MaterialTheme.colorScheme.primaryContainer,
+              modifier = Modifier
+                .semantics(mergeDescendants = true) {}
+                .testTag("session_reps_badge_${session.id}")
+            ) {
+              Text(
+                text = session.reps,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                fontSize = 10.sp
+              )
+            }
+          }
+
           if (progression?.isPersonalBest == true) {
             Surface(
               shape = RoundedCornerShape(8.dp),
@@ -449,7 +484,7 @@ fun WorkoutSessionRow(
           IconButton(
             onClick = onDelete,
             modifier = Modifier
-              .size(32.dp)
+              .minimumInteractiveComponentSize()
               .testTag("delete_session_${session.id}")
           ) {
             Icon(
@@ -462,10 +497,13 @@ fun WorkoutSessionRow(
         }
       }
 
-      // Equipment + optional reps/notes
+      // Equipment + optional volume/notes
+      val computedVolume = session.totalVolume()
       val detailParts = buildList {
         add(session.barName)
-        if (session.reps.isNotBlank()) add(session.reps)
+        if (computedVolume != null) {
+          add("${Plate.formatWeight(computedVolume)} ${session.weightUnit.shortLabel} vol")
+        }
         if (session.notes.isNotBlank()) add(session.notes)
       }
       Text(

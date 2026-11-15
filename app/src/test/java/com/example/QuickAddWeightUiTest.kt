@@ -22,6 +22,9 @@ import com.example.data.repository.LoadingPlanRepository
 import com.example.data.repository.PlateInventoryRepository
 import com.example.data.repository.WorkoutSessionRepository
 import com.example.model.WeightUnit
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import com.example.ui.BarbellAppScreen
 import com.example.ui.BarbellViewModel
 import com.example.ui.theme.BarbellTheme
@@ -43,6 +46,7 @@ class QuickAddWeightUiTest {
   val composeTestRule = createComposeRule()
 
   private lateinit var database: AppDatabase
+  private lateinit var viewModelStore: ViewModelStore
   private lateinit var viewModel: BarbellViewModel
 
   @Before
@@ -50,17 +54,27 @@ class QuickAddWeightUiTest {
     val application = ApplicationProvider.getApplicationContext<Application>()
     database = Room.inMemoryDatabaseBuilder(application, AppDatabase::class.java)
       .allowMainThreadQueries()
+      .setQueryExecutor { it.run() }
+      .setTransactionExecutor { it.run() }
       .build()
-    viewModel = BarbellViewModel(
-      application = application,
-      customRepository = LoadingPlanRepository(database.loadingPlanDao()),
-      customPlateRepository = PlateInventoryRepository(database.plateInventoryDao()),
-      customSessionRepository = WorkoutSessionRepository(database.workoutSessionDao())
-    )
+    viewModelStore = ViewModelStore()
+    val factory = object : ViewModelProvider.Factory {
+      @Suppress("UNCHECKED_CAST")
+      override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        return BarbellViewModel(
+          application = application,
+          customRepository = LoadingPlanRepository(database.loadingPlanDao()),
+          customPlateRepository = PlateInventoryRepository(database.plateInventoryDao()),
+          customSessionRepository = WorkoutSessionRepository(database.workoutSessionDao())
+        ) as T
+      }
+    }
+    viewModel = ViewModelProvider(viewModelStore, factory)[BarbellViewModel::class.java]
   }
 
   @After
   fun tearDown() {
+    viewModelStore.clear()
     database.close()
   }
 

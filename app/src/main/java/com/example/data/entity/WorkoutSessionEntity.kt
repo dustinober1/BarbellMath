@@ -38,6 +38,24 @@ data class WorkoutSessionEntity(
     return weightUnit.format(targetWeight)
   }
 
+  fun parseSetsAndReps(): Pair<Int, Int>? {
+    val normalized = reps.trim().lowercase().replace("×", "x")
+    val parts = normalized.split("x").map { it.trim() }
+    if (parts.size == 2) {
+      val sets = parts[0].toIntOrNull()
+      val repCount = parts[1].toIntOrNull()
+      if (sets != null && repCount != null && sets > 0 && repCount > 0) {
+        return sets to repCount
+      }
+    }
+    return null
+  }
+
+  fun totalVolume(): Double? {
+    val (sets, repCount) = parseSetsAndReps() ?: return null
+    return sets * repCount * achievedWeight
+  }
+
   fun parsePlates(): List<Pair<Double, Int>> {
     if (platesSummary.isBlank()) return emptyList()
     return try {

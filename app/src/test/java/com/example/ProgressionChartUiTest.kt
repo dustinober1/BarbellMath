@@ -2,11 +2,15 @@ package com.example
 
 import android.app.Application
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.AppDatabase
@@ -39,6 +43,7 @@ class ProgressionChartUiTest {
   val composeTestRule = createComposeRule()
 
   private lateinit var database: AppDatabase
+  private lateinit var viewModelStore: ViewModelStore
   private lateinit var sessionRepository: WorkoutSessionRepository
   private lateinit var planRepository: LoadingPlanRepository
   private lateinit var plateRepository: PlateInventoryRepository
@@ -48,7 +53,10 @@ class ProgressionChartUiTest {
     val context = ApplicationProvider.getApplicationContext<Application>()
     database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
       .allowMainThreadQueries()
+      .setQueryExecutor { it.run() }
+      .setTransactionExecutor { it.run() }
       .build()
+    viewModelStore = ViewModelStore()
     sessionRepository = WorkoutSessionRepository(database.workoutSessionDao())
     planRepository = LoadingPlanRepository(database.loadingPlanDao())
     plateRepository = PlateInventoryRepository(database.plateInventoryDao())
@@ -56,18 +64,29 @@ class ProgressionChartUiTest {
 
   @After
   fun tearDown() {
+    viewModelStore.clear()
     database.close()
+  }
+
+  private fun createViewModel(application: Application): BarbellViewModel {
+    val factory = object : ViewModelProvider.Factory {
+      @Suppress("UNCHECKED_CAST")
+      override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        return BarbellViewModel(
+          application = application,
+          customRepository = planRepository,
+          customPlateRepository = plateRepository,
+          customSessionRepository = sessionRepository
+        ) as T
+      }
+    }
+    return ViewModelProvider(viewModelStore, factory)[BarbellViewModel::class.java]
   }
 
   @Test
   fun progressTabShowsEmptyStateWhenNoSessionsLogged() {
     val application = ApplicationProvider.getApplicationContext<Application>()
-    val viewModel = BarbellViewModel(
-      application = application,
-      customRepository = planRepository,
-      customPlateRepository = plateRepository,
-      customSessionRepository = sessionRepository
-    )
+    val viewModel = createViewModel(application)
 
     composeTestRule.setContent {
       BarbellTheme {
@@ -94,12 +113,7 @@ class ProgressionChartUiTest {
     }
 
     val application = ApplicationProvider.getApplicationContext<Application>()
-    val viewModel = BarbellViewModel(
-      application = application,
-      customRepository = planRepository,
-      customPlateRepository = plateRepository,
-      customSessionRepository = sessionRepository
-    )
+    val viewModel = createViewModel(application)
 
     composeTestRule.setContent {
       BarbellTheme {
@@ -154,6 +168,58 @@ class ProgressionChartUiTest {
     composeTestRule.waitForIdle()
     assertEquals(0, viewModel.uiState.value.activeTab)
     assertEquals(245.0, viewModel.uiState.value.targetWeight, 0.001)
+  }
+
+  @Test
+  fun focusPrButtonHighlightsPeakPrMarkerAndUpdatesInspector() {
+    val dayMs = 86_400_000L
+    val now = 200L * dayMs
+    runBlocking {
+      sessionRepository.saveSession(
+        session(timestamp = now - 14L * dayMs, lift = "Deadlift", weight = 315.0, unit = WeightUnit.LBS)
+      )
+      sessionRepository.saveSession(
+        session(timestamp = now - 7L * dayMs, lift = "Deadlift", weight = 365.0, unit = WeightUnit.LBS)
+      )
+      sessionRepository.saveSession(
+        session(timestamp = now - 1L * dayMs, lift = "Deadlift", weight = 335.0, unit = WeightUnit.LBS)
+      )
+    }
+
+    val application = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = createViewModel(application)
+
+    composeTestRule.setContent {
+      BarbellTheme {
+        BarbellAppScreen(viewModel = viewModel)
+      }
+    }
+
+    composeTestRule.waitUntil(timeoutMillis = 5_000) {
+      viewModel.progressionChartState.value.points.size == 3
+    }
+
+    composeTestRule.onNodeWithTag("nav_tab_progress").performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("pr_legend_badge")
+      .assertIsDisplayed()
+      .assertTextContains("Personal Record (1)")
+
+    composeTestRule.onNodeWithTag("main_lazy_column")
+      .performScrollToNode(hasTestTag("selected_session_inspector"))
+
+    // Initially inspector shows the latest session (335 lbs)
+    composeTestRule.onNodeWithTag("selected_session_inspector")
+      .assertTextContains("335", substring = true)
+
+    // Tap "Focus PR" -> inspector snaps to peak PR (365 lbs)
+    composeTestRule.onNodeWithTag("jump_to_pr_button").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("selected_session_inspector")
+      .assertTextContains("365", substring = true)
+      .assertTextContains("PR", substring = true)
   }
 
   private fun session(

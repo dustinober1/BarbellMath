@@ -20,12 +20,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,8 +31,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -205,82 +200,41 @@ fun InventorySettingsScreen(
 
         val excludeTargetWeight = if (unit == WeightUnit.LBS) 35.0 else 15.0
         val isExcludedActive = plates.none { it.weight == excludeTargetWeight && it.isEnabled }
+        val minimalistSet = if (unit == WeightUnit.LBS) {
+          setOf(45.0, 25.0, 10.0, 5.0, 2.5)
+        } else {
+          setOf(25.0, 20.0, 10.0, 5.0, 2.5)
+        }
+        val isMinimalistActive = plates.isNotEmpty() && plates.all {
+          val shouldKeep = it.weight in minimalistSet
+          it.isEnabled == shouldKeep
+        }
+        val isAllEnabledActive = plates.isNotEmpty() && plates.all { it.isEnabled }
 
         FlowRow(
           horizontalArrangement = Arrangement.spacedBy(8.dp),
           verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-          Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = if (isExcludedActive) {
-              MaterialTheme.colorScheme.primary
-            } else {
-              MaterialTheme.colorScheme.surfaceVariant
-            },
-            modifier = Modifier
-              .clip(RoundedCornerShape(12.dp))
-              .clickable(onClick = onExclude35s)
-              .testTag("preset_exclude_35s_button")
-          ) {
-            Row(
-              modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-              if (isExcludedActive) {
-                Icon(
-                  imageVector = Icons.Default.Check,
-                  contentDescription = null,
-                  tint = MaterialTheme.colorScheme.onPrimary,
-                  modifier = Modifier.size(14.dp)
-                )
-              }
-              Text(
-                text = if (unit == WeightUnit.LBS) "Exclude 35 lb Plates" else "Exclude 15 kg Plates",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = if (isExcludedActive) {
-                  MaterialTheme.colorScheme.onPrimary
-                } else {
-                  MaterialTheme.colorScheme.onSurfaceVariant
-                }
-              )
-            }
-          }
+          PresetChip(
+            label = if (unit == WeightUnit.LBS) "Exclude 35 lb Plates" else "Exclude 15 kg Plates",
+            selected = isExcludedActive && !isMinimalistActive,
+            onClick = onExclude35s,
+            testTag = "preset_exclude_35s_button"
+          )
 
-          Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier
-              .clip(RoundedCornerShape(12.dp))
-              .clickable(onClick = onApplyMinimalist)
-              .testTag("preset_minimalist_button")
-          ) {
-            Text(
-              text = if (unit == WeightUnit.LBS) "Minimalist (45/25/10/5/2.5)" else "Minimalist (25/20/10/5/2.5)",
-              style = MaterialTheme.typography.labelSmall,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-            )
-          }
+          PresetChip(
+            label = if (unit == WeightUnit.LBS) "Minimalist (45/25/10/5/2.5)" else "Minimalist (25/20/10/5/2.5)",
+            selected = isMinimalistActive,
+            onClick = onApplyMinimalist,
+            testTag = "preset_minimalist_button"
+          )
 
-          Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier
-              .clip(RoundedCornerShape(12.dp))
-              .clickable(onClick = onEnableAll)
-              .testTag("preset_enable_all_button")
-          ) {
-            Text(
-              text = "Enable All Denominations",
-              style = MaterialTheme.typography.labelSmall,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-            )
-          }
+          PresetChip(
+            label = "Enable All Denominations",
+            selected = isAllEnabledActive,
+            onClick = onEnableAll,
+            testTag = "preset_enable_all_button"
+          )
         }
       }
     }
@@ -571,213 +525,47 @@ fun InventorySettingsScreen(
 }
 
 @Composable
-private fun PlateInventorySettingRow(
-  plate: Plate,
-  unit: WeightUnit,
-  onToggle: () -> Unit,
-  onUpdatePairs: (Int) -> Unit,
-  onEditCustom: (() -> Unit)? = null,
-  onDeleteCustom: (() -> Unit)? = null,
-  modifier: Modifier = Modifier
+private fun PresetChip(
+  label: String,
+  selected: Boolean,
+  onClick: () -> Unit,
+  testTag: String
 ) {
-  val is35 = (plate.weight == 35.0 && unit == WeightUnit.LBS) || (plate.weight == 15.0 && unit == WeightUnit.KG)
-
   Surface(
-    shape = RoundedCornerShape(18.dp),
-    color = if (plate.isEnabled) {
-      MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    shape = RoundedCornerShape(12.dp),
+    color = if (selected) {
+      MaterialTheme.colorScheme.primary
     } else {
-      MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
+      MaterialTheme.colorScheme.surfaceVariant
     },
-    border = androidx.compose.foundation.BorderStroke(
-      1.dp,
-      if (plate.isEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.Transparent
-    ),
-    modifier = modifier
-      .fillMaxWidth()
-      .then(if (onEditCustom != null) Modifier.clickable(onClick = onEditCustom) else Modifier)
-      .testTag("settings_plate_row_${plate.formattedWeight}")
+    modifier = Modifier
+      .clip(RoundedCornerShape(12.dp))
+      .clickable(onClick = onClick)
+      .testTag(testTag)
   ) {
     Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 14.dp, vertical = 10.dp),
+      modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
       verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.SpaceBetween
+      horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-      // Left: Plate Avatar and Details
-      Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.weight(1f)
-      ) {
-        Box(
-          modifier = Modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(plate.color.copy(alpha = if (plate.isEnabled) 1.0f else 0.35f))
-            .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(10.dp)),
-          contentAlignment = Alignment.Center
-        ) {
-          Text(
-            text = plate.formattedWeight,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Black,
-            color = plate.textColor,
-            fontSize = if (plate.formattedWeight.length > 3) 10.sp else 12.sp
-          )
-        }
-
-        Column {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-          ) {
-            Text(
-              text = "${plate.formattedWeight} ${unit.shortLabel}",
-              style = MaterialTheme.typography.titleSmall,
-              fontWeight = FontWeight.Bold,
-              color = if (plate.isEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            )
-
-            if (plate.isCustom) {
-              Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer
-              ) {
-                Text(
-                  text = "Custom",
-                  style = MaterialTheme.typography.labelSmall,
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 9.sp,
-                  color = MaterialTheme.colorScheme.onSecondaryContainer,
-                  modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                )
-              }
-            } else if (is35) {
-              Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-              ) {
-                Text(
-                  text = if (unit == WeightUnit.LBS) "35s" else "15s",
-                  style = MaterialTheme.typography.labelSmall,
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 9.sp,
-                  color = MaterialTheme.colorScheme.onPrimaryContainer,
-                  modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                )
-              }
-            }
-          }
-
-          Text(
-            text = if (plate.isEnabled) {
-              "${plate.availablePairs} ${if (plate.availablePairs == 1) "pair" else "pairs"} in gym"
-            } else {
-              "Excluded from calculations"
-            },
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium,
-            fontSize = 11.sp,
-            color = if (plate.isEnabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-          )
-        }
-      }
-
-      // Right: Custom actions, Pair Steppers & Toggle Switch
-      Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-      ) {
-        if (plate.isCustom && onEditCustom != null) {
-          IconButton(
-            onClick = onEditCustom,
-            modifier = Modifier
-              .size(32.dp)
-              .testTag("edit_custom_plate_${plate.formattedWeight}")
-          ) {
-            Icon(
-              imageVector = Icons.Default.Edit,
-              contentDescription = "Edit custom plate",
-              tint = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.size(16.dp)
-            )
-          }
-        }
-
-        if (plate.isCustom && onDeleteCustom != null) {
-          IconButton(
-            onClick = onDeleteCustom,
-            modifier = Modifier
-              .size(32.dp)
-              .testTag("delete_custom_plate_${plate.formattedWeight}")
-          ) {
-            Icon(
-              imageVector = Icons.Default.Delete,
-              contentDescription = "Delete custom plate",
-              tint = MaterialTheme.colorScheme.error,
-              modifier = Modifier.size(16.dp)
-            )
-          }
-        }
-
-        if (plate.isEnabled) {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
-          ) {
-            IconButton(
-              onClick = { if (plate.availablePairs > 1) onUpdatePairs(plate.availablePairs - 1) },
-              modifier = Modifier
-                .size(30.dp)
-                .testTag("decrement_pairs_${plate.formattedWeight}")
-            ) {
-              Icon(
-                imageVector = Icons.Default.Remove,
-                contentDescription = "Decrease pairs",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp)
-              )
-            }
-
-            Text(
-              text = "${plate.availablePairs}",
-              style = MaterialTheme.typography.labelMedium,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurface,
-              modifier = Modifier.padding(horizontal = 4.dp)
-            )
-
-            IconButton(
-              onClick = { onUpdatePairs(plate.availablePairs + 1) },
-              modifier = Modifier
-                .size(30.dp)
-                .testTag("increment_pairs_${plate.formattedWeight}")
-            ) {
-              Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Increase pairs",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp)
-              )
-            }
-          }
-        }
-
-        // Toggle Switch
-        Switch(
-          checked = plate.isEnabled,
-          onCheckedChange = { onToggle() },
-          colors = SwitchDefaults.colors(
-            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-            checkedTrackColor = MaterialTheme.colorScheme.primary,
-            uncheckedThumbColor = MaterialTheme.colorScheme.outline,
-            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
-          ),
-          modifier = Modifier.testTag("switch_plate_${plate.formattedWeight}")
+      if (selected) {
+        Icon(
+          imageVector = Icons.Default.Check,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.onPrimary,
+          modifier = Modifier.size(14.dp)
         )
       }
+      Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = if (selected) {
+          MaterialTheme.colorScheme.onPrimary
+        } else {
+          MaterialTheme.colorScheme.onSurfaceVariant
+        }
+      )
     }
   }
 }

@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -39,13 +41,16 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.model.Plate
 import com.example.model.PlateCalculationResult
+import com.example.model.WeightUnit
 import com.example.ui.theme.PlateGreen
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlateBreakdownCard(
   result: PlateCalculationResult,
+  availablePlates: List<Plate> = emptyList(),
   onOpenInventorySettings: () -> Unit = {},
   onSaveSession: (() -> Unit)? = null,
   modifier: Modifier = Modifier
@@ -104,6 +109,67 @@ fun PlateBreakdownCard(
               letterSpacing = 0.5.sp,
               color = MaterialTheme.colorScheme.onPrimaryContainer,
               modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+            )
+          }
+        }
+      }
+
+      if (availablePlates.isNotEmpty()) {
+        val activePlates = availablePlates.filter { it.isEnabled && it.availablePairs > 0 }
+        val midPlateWeight = if (result.unit == WeightUnit.LBS) 35.0 else 15.0
+        val isMidExcluded = availablePlates.any { it.weight == midPlateWeight } &&
+          availablePlates.none { it.weight == midPlateWeight && it.isEnabled && it.availablePairs > 0 }
+        val hasFractional = activePlates.any { it.weight < 2.5 }
+
+        val summaryLabel = buildString {
+          append("Gym plates: ${activePlates.size}/${availablePlates.size} active")
+          if (isMidExcluded) {
+            append(" • ${Plate.formatWeight(midPlateWeight)}${result.unit.shortLabel} off")
+          } else if (hasFractional) {
+            append(" • Fractional on")
+          }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+        Surface(
+          shape = RoundedCornerShape(12.dp),
+          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+          modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onOpenInventorySettings)
+            .testTag("breakdown_gym_settings_chip")
+        ) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              modifier = Modifier.weight(1f)
+            ) {
+              Icon(
+                imageVector = Icons.Default.Tune,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp)
+              )
+              Text(
+                text = summaryLabel,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+            }
+            Text(
+              text = "Edit",
+              style = MaterialTheme.typography.labelMedium,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.primary
             )
           }
         }
@@ -371,7 +437,7 @@ fun PlateBreakdownCard(
           )
           Spacer(modifier = Modifier.width(8.dp))
           Text(
-            text = "Save to Recent Sessions",
+            text = "Log Sets & Reps",
             fontWeight = FontWeight.Bold
           )
         }
