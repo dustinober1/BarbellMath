@@ -1,5 +1,6 @@
 package com.example.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,9 +19,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.FormatListNumbered
@@ -53,6 +56,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,6 +78,7 @@ import com.example.ui.components.InventoryManagerSheet
 import com.example.ui.components.InventorySettingsScreen
 import com.example.ui.components.LoadingHistorySheet
 import com.example.ui.components.PlateBreakdownCard
+import com.example.ui.components.ProgressionChartsSection
 import com.example.ui.components.RecentSessionsCard
 import com.example.ui.components.ReversePlateBuilderSection
 import com.example.ui.components.SaveSessionDialog
@@ -91,6 +96,11 @@ fun BarbellAppScreen(
   val recentPlans by viewModel.recentPlans.collectAsStateWithLifecycle()
   val recentSessions by viewModel.recentSessions.collectAsStateWithLifecycle()
   val sessionProgressions by viewModel.sessionProgressions.collectAsStateWithLifecycle()
+  val progressionChartState by viewModel.progressionChartState.collectAsStateWithLifecycle()
+
+  BackHandler(enabled = uiState.activeTab != 0) {
+    viewModel.setActiveTab(0)
+  }
 
   var isBarSelectorSheetOpen by remember { mutableStateOf(false) }
   var isInventorySheetOpen by remember { mutableStateOf(false) }
@@ -98,6 +108,11 @@ fun BarbellAppScreen(
   var isSaveSessionDialogOpen by remember { mutableStateOf(false) }
   val snackbarHostState = remember { SnackbarHostState() }
   val coroutineScope = rememberCoroutineScope()
+  val mainListState = rememberLazyListState()
+
+  LaunchedEffect(uiState.activeTab) {
+    mainListState.scrollToItem(0)
+  }
 
   val effectiveBarWeight = if (uiState.selectedBar.isCustom) {
     uiState.customBarWeight
@@ -173,13 +188,13 @@ fun BarbellAppScreen(
           }
 
           IconButton(
-            onClick = { viewModel.setActiveTab(3) },
+            onClick = { viewModel.setActiveTab(4) },
             modifier = Modifier.testTag("open_inventory_button")
           ) {
             Icon(
               imageVector = Icons.Default.Tune,
               contentDescription = "Home Gym Settings",
-              tint = if (uiState.activeTab == 3) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+              tint = if (uiState.activeTab == 4) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )
           }
 
@@ -216,7 +231,7 @@ fun BarbellAppScreen(
               contentDescription = "Calculator"
             )
           },
-          label = { Text("Calculator") },
+          label = { Text("Calc", maxLines = 1, softWrap = false) },
           colors = NavigationBarItemDefaults.colors(
             indicatorColor = MaterialTheme.colorScheme.primaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -234,7 +249,7 @@ fun BarbellAppScreen(
               contentDescription = "Warm-up"
             )
           },
-          label = { Text("Warm-up") },
+          label = { Text("Warm-up", maxLines = 1, softWrap = false) },
           colors = NavigationBarItemDefaults.colors(
             indicatorColor = MaterialTheme.colorScheme.primaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -249,10 +264,10 @@ fun BarbellAppScreen(
           icon = {
             Icon(
               imageVector = Icons.Default.Layers,
-              contentDescription = "Racker"
+              contentDescription = "Reverse Rack"
             )
           },
-          label = { Text("Reverse Rack") },
+          label = { Text("Racker", maxLines = 1, softWrap = false) },
           colors = NavigationBarItemDefaults.colors(
             indicatorColor = MaterialTheme.colorScheme.primaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -263,14 +278,32 @@ fun BarbellAppScreen(
 
         NavigationBarItem(
           selected = uiState.activeTab == 3,
-          onClick = { viewModel.setActiveTab(3) },
+          onClick = { viewModel.openProgressTab() },
+          icon = {
+            Icon(
+              imageVector = Icons.AutoMirrored.Filled.ShowChart,
+              contentDescription = "Progress"
+            )
+          },
+          label = { Text("Progress", maxLines = 1, softWrap = false) },
+          colors = NavigationBarItemDefaults.colors(
+            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            selectedTextColor = MaterialTheme.colorScheme.primary
+          ),
+          modifier = Modifier.testTag("nav_tab_progress")
+        )
+
+        NavigationBarItem(
+          selected = uiState.activeTab == 4,
+          onClick = { viewModel.setActiveTab(4) },
           icon = {
             Icon(
               imageVector = Icons.Default.Tune,
               contentDescription = "Settings"
             )
           },
-          label = { Text("Settings") },
+          label = { Text("Settings", maxLines = 1, softWrap = false) },
           colors = NavigationBarItemDefaults.colors(
             indicatorColor = MaterialTheme.colorScheme.primaryContainer,
             selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -282,10 +315,12 @@ fun BarbellAppScreen(
     }
   ) { innerPadding ->
     LazyColumn(
+      state = mainListState,
       modifier = Modifier
         .fillMaxSize()
         .padding(innerPadding)
-        .padding(horizontal = 16.dp),
+        .padding(horizontal = 16.dp)
+        .testTag("main_lazy_column"),
       verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
       item {
@@ -325,7 +360,7 @@ fun BarbellAppScreen(
         item {
           PlateBreakdownCard(
             result = uiState.calculationResult,
-            onOpenInventorySettings = { viewModel.setActiveTab(3) },
+            onOpenInventorySettings = { viewModel.setActiveTab(4) },
             onSaveSession = { isSaveSessionDialogOpen = true }
           )
         }
@@ -337,7 +372,8 @@ fun BarbellAppScreen(
             onSaveCurrentSession = { isSaveSessionDialogOpen = true },
             onSelectSession = { viewModel.loadSession(it) },
             onDeleteSession = { viewModel.deleteSession(it) },
-            onViewAllSessions = { isHistorySheetOpen = true }
+            onViewAllSessions = { isHistorySheetOpen = true },
+            onOpenProgressCharts = { viewModel.openProgressTab() }
           )
         }
       }
@@ -390,8 +426,24 @@ fun BarbellAppScreen(
         }
       }
 
-      // Tab 3: Home Gym Inventory Settings Screen
+      // Tab 3: Strength Progression Charts
       if (uiState.activeTab == 3) {
+        item {
+          ProgressionChartsSection(
+            chartState = progressionChartState,
+            sessionProgressions = sessionProgressions,
+            onUnitChange = { viewModel.setChartUnit(it) },
+            onLiftFilterChange = { viewModel.setChartLiftFilter(it) },
+            onTimeRangeChange = { viewModel.setChartTimeRange(it) },
+            onSelectSession = { viewModel.loadSession(it) },
+            onDeleteSession = { viewModel.deleteSession(it) },
+            onSaveCurrentSession = { isSaveSessionDialogOpen = true }
+          )
+        }
+      }
+
+      // Tab 4: Home Gym Inventory Settings Screen
+      if (uiState.activeTab == 4) {
         item {
           InventorySettingsScreen(
             plates = if (uiState.unit == WeightUnit.LBS) uiState.lbsPlates else uiState.kgPlates,
@@ -461,6 +513,7 @@ fun BarbellAppScreen(
       onSelectSession = { viewModel.loadSession(it) },
       onDeleteSession = { viewModel.deleteSession(it) },
       onClearAllSessions = { viewModel.clearAllSessions() },
+      onOpenProgressCharts = { viewModel.openProgressTab() },
       onDismiss = { isHistorySheetOpen = false }
     )
   }

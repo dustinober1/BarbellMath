@@ -8,8 +8,11 @@ import com.example.calculator.BarbellCalculator
 import com.example.data.AppDatabase
 import com.example.data.entity.LoadingPlanEntity
 import com.example.data.entity.WorkoutSessionEntity
+import com.example.data.repository.ChartTimeRange
 import com.example.data.repository.LoadingPlanRepository
 import com.example.data.repository.PlateInventoryRepository
+import com.example.data.repository.ProgressionChartAnalyzer
+import com.example.data.repository.ProgressionChartState
 import com.example.data.repository.SessionProgression
 import com.example.data.repository.WorkoutSessionRepository
 import com.example.model.BarType
@@ -54,7 +57,14 @@ data class BarbellUiState(
   val reverseTotalWeight: Double = 45.0,
   val isFullBarView: Boolean = false,
   val showPlateLabels: Boolean = true,
-  val activeTab: Int = 0 // 0: Plate Calculator, 1: Warm-up Ladder, 2: Reverse Racker, 3: Settings
+  val activeTab: Int = 0 // 0: Plate Calculator, 1: Warm-up Ladder, 2: Reverse Racker, 3: Progress, 4: Settings
+)
+
+private data class ChartFilterState(
+  val unit: WeightUnit = WeightUnit.LBS,
+  val hasExplicitUnitSelection: Boolean = false,
+  val selectedLift: String = "All",
+  val timeRange: ChartTimeRange = ChartTimeRange.ALL
 )
 
 class BarbellViewModel @JvmOverloads constructor(
@@ -89,7 +99,14 @@ class BarbellViewModel @JvmOverloads constructor(
       initialValue = emptyList()
     )
 
-  val sessionProgressions: StateFlow<Map<Long, SessionProgression>> = recentSessions
+  val allSessions: StateFlow<List<WorkoutSessionEntity>> = sessionRepository.allSessions
+    .stateIn(
+      scope = viewModelScope,
+      started = SharingStarted.WhileSubscribed(5000),
+      initialValue = emptyList()
+    )
+
+  val sessionProgressions: StateFlow<Map<Long, SessionProgression>> = allSessions
     .map { WorkoutSessionRepository.computeSessionProgressions(it) }
     .stateIn(
       scope = viewModelScope,
@@ -99,6 +116,35 @@ class BarbellViewModel @JvmOverloads constructor(
 
   private val _uiState = MutableStateFlow(BarbellUiState())
   val uiState: StateFlow<BarbellUiState> = _uiState.asStateFlow()
+
+  private val _chartFilterState = MutableStateFlow(ChartFilterState())
+
+  val progressionChartState: StateFlow<ProgressionChartState> = combine(
+    allSessions,
+    _chartFilterState,
+    _uiState.map { it.unit }
+  ) { sessions, filter, activeCalculatorUnit ->
+    val resolvedUnit = if (filter.hasExplicitUnitSelection) {
+      filter.unit
+    } else {
+      val hasActiveUnitSessions = sessions.any { it.weightUnit == activeCalculatorUnit }
+      when {
+        hasActiveUnitSessions -> activeCalculatorUnit
+        sessions.isNotEmpty() -> sessions.first().weightUnit
+        else -> activeCalculatorUnit
+      }
+    }
+    ProgressionChartAnalyzer.analyze(
+      sessions = sessions,
+      unit = resolvedUnit,
+      selectedLift = filter.selectedLift,
+      timeRange = filter.timeRange
+    )
+  }.stateIn(
+    scope = viewModelScope,
+    started = SharingStarted.WhileSubscribed(5000),
+    initialValue = ProgressionChartState()
+  )
 
   private var autoSaveJob: Job? = null
   @Volatile
@@ -188,6 +234,28 @@ class BarbellViewModel @JvmOverloads constructor(
 
   fun setActiveTab(tabIndex: Int) {
     _uiState.update { it.copy(activeTab = tabIndex) }
+  }
+
+  fun openProgressTab() {
+    _uiState.update { it.copy(activeTab = 3) }
+  }
+
+  fun setChartUnit(unit: WeightUnit) {
+    _chartFilterState.update {
+      it.copy(unit = unit, hasExplicitUnitSelection = true)
+    }
+  }
+
+  fun setChartLiftFilter(lift: String) {
+    _chartFilterState.update {
+      it.copy(selectedLift = lift)
+    }
+  }
+
+  fun setChartTimeRange(range: ChartTimeRange) {
+    _chartFilterState.update {
+      it.copy(timeRange = range)
+    }
   }
 
   fun togglePlateEnabled(plateWeight: Double) {

@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -83,6 +84,7 @@ fun LoadingHistorySheet(
   onSelectSession: (WorkoutSessionEntity) -> Unit = {},
   onDeleteSession: (Long) -> Unit = {},
   onClearAllSessions: () -> Unit = {},
+  onOpenProgressCharts: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -347,18 +349,53 @@ fun LoadingHistorySheet(
                     color = MaterialTheme.colorScheme.primary
                   )
                 }
-                Column(horizontalAlignment = Alignment.End) {
-                  Text(
-                    text = "Sessions",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                  )
-                  Text(
-                    text = "${filteredSessions.size}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                  )
+                Row(
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                  Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                      text = "Sessions",
+                      style = MaterialTheme.typography.labelSmall,
+                      color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                      text = "${filteredSessions.size}",
+                      style = MaterialTheme.typography.titleMedium,
+                      fontWeight = FontWeight.Bold,
+                      color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                  }
+                  Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                      .clip(RoundedCornerShape(10.dp))
+                      .clickable {
+                        onDismiss()
+                        onOpenProgressCharts()
+                      }
+                      .testTag("history_sheet_view_charts_button")
+                  ) {
+                    Row(
+                      modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                      Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ShowChart,
+                        contentDescription = "View Charts",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(15.dp)
+                      )
+                      Text(
+                        text = "Charts",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
+                      )
+                    }
+                  }
                 }
               }
             }

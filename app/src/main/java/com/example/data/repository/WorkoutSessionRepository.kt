@@ -13,6 +13,7 @@ data class SessionProgression(
 class WorkoutSessionRepository(private val dao: WorkoutSessionDao) {
 
   val recentSessions: Flow<List<WorkoutSessionEntity>> = dao.getRecentSessions(50)
+  val allSessions: Flow<List<WorkoutSessionEntity>> = dao.getAllSessions()
 
   suspend fun saveSession(session: WorkoutSessionEntity): Long {
     return dao.insertSession(session)

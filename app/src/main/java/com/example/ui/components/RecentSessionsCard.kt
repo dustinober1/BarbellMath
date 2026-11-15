@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.BookmarkAdd
@@ -66,6 +67,7 @@ fun RecentSessionsCard(
   onSelectSession: (WorkoutSessionEntity) -> Unit,
   onDeleteSession: (Long) -> Unit,
   onViewAllSessions: () -> Unit,
+  onOpenProgressCharts: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   Card(
@@ -181,6 +183,11 @@ fun RecentSessionsCard(
           }
         }
       } else {
+        RecentSessionsTrendPreview(
+          sessions = sessions,
+          onOpenProgressCharts = onOpenProgressCharts
+        )
+
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
           sessions.take(5).forEach { session ->
             WorkoutSessionRow(
@@ -190,6 +197,115 @@ fun RecentSessionsCard(
               onDelete = { onDeleteSession(session.id) }
             )
           }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun RecentSessionsTrendPreview(
+  sessions: List<WorkoutSessionEntity>,
+  onOpenProgressCharts: () -> Unit,
+  modifier: Modifier = Modifier
+) {
+  val latest = sessions.firstOrNull() ?: return
+  val activeUnit = latest.weightUnit
+  val chronologicalSameUnit = sessions
+    .filter { it.weightUnit == activeUnit }
+    .sortedWith(compareBy<WorkoutSessionEntity> { it.timestamp }.thenBy { it.id })
+    .takeLast(12)
+
+  val weights = chronologicalSameUnit.map { it.achievedWeight }
+  val netDelta = if (weights.size >= 2) weights.last() - weights.first() else null
+  val bestWeight = weights.maxOrNull() ?: latest.achievedWeight
+
+  Surface(
+    shape = RoundedCornerShape(18.dp),
+    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+    border = androidx.compose.foundation.BorderStroke(
+      1.dp,
+      MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+    ),
+    modifier = modifier
+      .fillMaxWidth()
+      .clip(RoundedCornerShape(18.dp))
+      .clickable(onClick = onOpenProgressCharts)
+      .testTag("recent_sessions_trend_preview")
+  ) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 14.dp, vertical = 10.dp),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Column(
+        modifier = Modifier.weight(1f),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+      ) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+          Text(
+            text = "Strength Trend",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+          )
+          if (netDelta != null && abs(netDelta) >= 0.01) {
+            val sign = if (netDelta > 0) "+" else "-"
+            val fg = if (netDelta > 0) PlateGreen else MaterialTheme.colorScheme.onSurfaceVariant
+            Text(
+              text = "$sign${Plate.formatWeight(abs(netDelta))} ${activeUnit.shortLabel}",
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.Bold,
+              color = fg
+            )
+          }
+        }
+        Text(
+          text = "Best ${Plate.formatWeight(bestWeight)} ${activeUnit.shortLabel} • Tap for full charts",
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          fontSize = 11.sp
+        )
+      }
+
+      if (weights.size >= 2) {
+        MiniProgressionSparkline(
+          weights = weights,
+          isPositiveOrFlat = (netDelta ?: 0.0) >= 0.0,
+          modifier = Modifier
+            .width(84.dp)
+            .height(34.dp)
+            .padding(horizontal = 6.dp)
+        )
+      }
+
+      Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.primary
+      ) {
+        Row(
+          modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+          Icon(
+            imageVector = Icons.AutoMirrored.Filled.ShowChart,
+            contentDescription = "Open Progress Charts",
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.size(14.dp)
+          )
+          Text(
+            text = "Charts",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onPrimary,
+            fontSize = 11.sp
+          )
         }
       }
     }
