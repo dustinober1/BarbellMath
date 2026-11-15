@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Insights
@@ -32,6 +33,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -73,6 +75,7 @@ fun ProgressionChartsSection(
   onSelectSession: (WorkoutSessionEntity) -> Unit,
   onDeleteSession: (Long) -> Unit,
   onSaveCurrentSession: () -> Unit,
+  onExportCsv: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   var selectedPointIndex by remember { mutableStateOf<Int?>(null) }
@@ -322,7 +325,7 @@ fun ProgressionChartsSection(
         ) {
           Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
           ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -344,6 +347,32 @@ fun ProgressionChartsSection(
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+            }
+
+            OutlinedButton(
+              onClick = onExportCsv,
+              shape = RoundedCornerShape(14.dp),
+              contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                horizontal = 12.dp,
+                vertical = 8.dp
+              ),
+              modifier = Modifier
+                .defaultMinSize(minHeight = 48.dp)
+                .testTag("export_progression_csv_button")
+            ) {
+              Icon(
+                imageVector = Icons.Default.Download,
+                contentDescription = "Export CSV",
+                modifier = Modifier.size(18.dp)
+              )
+              Spacer(modifier = Modifier.width(6.dp))
+              Text(
+                text = "Export CSV",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false
               )
             }
           }

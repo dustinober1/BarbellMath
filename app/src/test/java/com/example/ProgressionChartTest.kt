@@ -3,8 +3,10 @@ package com.example
 import com.example.data.entity.WorkoutSessionEntity
 import com.example.data.repository.ChartTimeRange
 import com.example.data.repository.ProgressionChartAnalyzer
+import com.example.data.repository.ProgressionCsvExporter
 import com.example.model.BarType
 import com.example.model.WeightUnit
+import java.util.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -102,27 +104,89 @@ class ProgressionChartTest {
     )
   }
 
+  @Test
+  fun csvExporterFormatsRowsAndEscapesRfc4180Fields() {
+    val utc = TimeZone.getTimeZone("UTC")
+    val sessions = listOf(
+      session(
+        id = 1,
+        timestamp = 1_700_000_000_000L, // 2023-11-14 22:13:20 UTC
+        lift = "Squat",
+        weight = 225.0,
+        unit = WeightUnit.LBS,
+        notes = "Belt, sleeves, \"paused\" rep\nsecond line",
+        collars = true,
+        platesSummary = "45.0:2,25.0:1"
+      ),
+      session(
+        id = 2,
+        timestamp = 1_700_086_400_000L, // 2023-11-15 22:13:20 UTC
+        lift = "Squat",
+        weight = 245.5,
+        unit = WeightUnit.LBS,
+        notes = "Felt strong",
+        collars = false,
+        platesSummary = "45.0:2,25.0:1,2.5:1"
+      )
+    )
+
+    val state = ProgressionChartAnalyzer.analyze(
+      sessions = sessions,
+      unit = WeightUnit.LBS,
+      selectedLift = "Squat",
+      timeRange = ChartTimeRange.MONTH_3,
+      nowMillis = 1_700_100_000_000L
+    )
+
+    val csv = ProgressionCsvExporter.buildCsv(state.points, timeZone = utc)
+    val lines = csv.trimEnd().lines()
+    assertTrue(lines.first().startsWith("Date,Time,Lift,Achieved Weight,Target Weight,Unit,"))
+    assertTrue(csv.contains("\"Belt, sleeves, \"\"paused\"\" rep\nsecond line\""))
+    assertTrue(csv.contains("2023-11-14,22:13:20,Squat,225,225,lbs,,No,5x5,"))
+    assertTrue(csv.contains("2023-11-15,22:13:20,Squat,245.5,245.5,lbs,+20.5,Yes,5x5,"))
+    assertTrue(csv.contains("45x2; 25x1"))
+    assertTrue(csv.contains("45x2; 25x1; 2.5x1"))
+
+    val fileName = ProgressionCsvExporter.suggestedFileName(
+      chartState = state,
+      nowMillis = 1_700_086_400_000L,
+      timeZone = utc
+    )
+    assertEquals("plate_master_squat_lbs_3m_2023-11-15.csv", fileName)
+  }
+
+  @Test
+  fun csvExporterHandlesEmptyPointsWithHeaderOnly() {
+    val csv = ProgressionCsvExporter.buildCsv(emptyList())
+    val lines = csv.trimEnd().lines()
+    assertEquals(1, lines.size)
+    assertEquals(ProgressionCsvExporter.CSV_HEADERS.joinToString(","), lines[0])
+  }
+
   private fun session(
     id: Long,
     timestamp: Long,
     lift: String,
     weight: Double,
-    unit: WeightUnit
+    unit: WeightUnit,
+    notes: String = "",
+    collars: Boolean = false,
+    platesSummary: String = "45.0:2"
   ): WorkoutSessionEntity {
     return WorkoutSessionEntity(
       id = id,
       timestamp = timestamp,
       liftName = lift,
       reps = "5x5",
-      notes = "",
+      notes = notes,
       targetWeight = weight,
       achievedWeight = weight,
       unit = unit.name,
       barId = BarType.OLYMPIC_MENS.id,
       barName = BarType.OLYMPIC_MENS.name,
       barWeight = if (unit == WeightUnit.LBS) 45.0 else 20.0,
-      collarsEnabled = false,
-      platesSummary = "45.0:2",
+      collarsEnabled = collars,
+      platesSummary = platesSummary,
       totalPlatesOnBar = 4,
       isExact = true
     )

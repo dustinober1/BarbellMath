@@ -79,6 +79,7 @@ class ProgressionChartUiTest {
     composeTestRule.waitForIdle()
     assertEquals(3, viewModel.uiState.value.activeTab)
     composeTestRule.onNodeWithTag("charts_empty_state").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("export_progression_csv_button").assertDoesNotExist()
   }
 
   @Test
@@ -142,6 +143,7 @@ class ProgressionChartUiTest {
     assertEquals(ChartTimeRange.ALL, viewModel.progressionChartState.value.selectedTimeRange)
 
     composeTestRule.onNodeWithTag("progression_kpi_row").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("export_progression_csv_button").assertIsDisplayed()
     composeTestRule.onNodeWithTag("weight_progression_canvas").assertIsDisplayed()
     composeTestRule.onNodeWithTag("main_lazy_column")
       .performScrollToNode(hasTestTag("inspector_load_on_bar_button"))

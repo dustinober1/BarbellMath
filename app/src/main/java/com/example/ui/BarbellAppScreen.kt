@@ -1,6 +1,8 @@
 package com.example.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -66,11 +68,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.repository.ChartPoint
+import com.example.data.repository.ProgressionCsvExporter
 import com.example.model.WeightUnit
 import com.example.ui.components.BarSelectorSheet
 import com.example.ui.components.BarbellCanvasSection
@@ -84,7 +89,10 @@ import com.example.ui.components.ReversePlateBuilderSection
 import com.example.ui.components.SaveSessionDialog
 import com.example.ui.components.TargetWeightControlCard
 import com.example.ui.components.WarmupLadderSection
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -108,7 +116,40 @@ fun BarbellAppScreen(
   var isSaveSessionDialogOpen by remember { mutableStateOf(false) }
   val snackbarHostState = remember { SnackbarHostState() }
   val coroutineScope = rememberCoroutineScope()
+  val context = LocalContext.current
   val mainListState = rememberLazyListState()
+  var pendingCsvPoints by remember { mutableStateOf<List<ChartPoint>?>(null) }
+
+  val createCsvLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.CreateDocument("text/csv")
+  ) { uri ->
+    val pointsToExport = pendingCsvPoints ?: progressionChartState.points
+    pendingCsvPoints = null
+    if (uri != null) {
+      coroutineScope.launch {
+        try {
+          val csvContent = ProgressionCsvExporter.buildCsv(pointsToExport)
+          withContext(Dispatchers.IO) {
+            val stream = context.contentResolver.openOutputStream(uri)
+              ?: error("Unable to open destination file")
+            stream.bufferedWriter(Charsets.UTF_8).use { writer ->
+              writer.write(csvContent)
+            }
+          }
+          val count = pointsToExport.size
+          snackbarHostState.showSnackbar(
+            "Exported $count ${if (count == 1) "session" else "sessions"} to CSV"
+          )
+        } catch (ce: CancellationException) {
+          throw ce
+        } catch (e: Exception) {
+          snackbarHostState.showSnackbar(
+            "CSV export failed: ${e.localizedMessage ?: "Unable to write file"}"
+          )
+        }
+      }
+    }
+  }
 
   LaunchedEffect(uiState.activeTab) {
     mainListState.scrollToItem(0)
@@ -437,7 +478,15 @@ fun BarbellAppScreen(
             onTimeRangeChange = { viewModel.setChartTimeRange(it) },
             onSelectSession = { viewModel.loadSession(it) },
             onDeleteSession = { viewModel.deleteSession(it) },
-            onSaveCurrentSession = { isSaveSessionDialogOpen = true }
+            onSaveCurrentSession = { isSaveSessionDialogOpen = true },
+            onExportCsv = {
+              if (progressionChartState.points.isNotEmpty()) {
+                pendingCsvPoints = progressionChartState.points
+                createCsvLauncher.launch(
+                  ProgressionCsvExporter.suggestedFileName(progressionChartState)
+                )
+              }
+            }
           )
         }
       }
