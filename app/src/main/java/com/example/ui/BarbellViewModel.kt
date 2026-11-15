@@ -7,8 +7,11 @@ import androidx.lifecycle.viewModelScope
 import com.example.calculator.BarbellCalculator
 import com.example.data.AppDatabase
 import com.example.data.entity.LoadingPlanEntity
+import com.example.data.entity.WorkoutSessionEntity
 import com.example.data.repository.LoadingPlanRepository
 import com.example.data.repository.PlateInventoryRepository
+import com.example.data.repository.SessionProgression
+import com.example.data.repository.WorkoutSessionRepository
 import com.example.model.BarType
 import com.example.model.Plate
 import com.example.model.PlateCalculationResult
@@ -22,6 +25,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -56,7 +60,8 @@ data class BarbellUiState(
 class BarbellViewModel @JvmOverloads constructor(
   application: Application,
   customRepository: LoadingPlanRepository? = null,
-  customPlateRepository: PlateInventoryRepository? = null
+  customPlateRepository: PlateInventoryRepository? = null,
+  customSessionRepository: WorkoutSessionRepository? = null
 ) : AndroidViewModel(application) {
 
   private val database by lazy { AppDatabase.getInstance(application) }
@@ -67,11 +72,29 @@ class BarbellViewModel @JvmOverloads constructor(
   private val plateRepository: PlateInventoryRepository = customPlateRepository
     ?: PlateInventoryRepository(database.plateInventoryDao())
 
+  private val sessionRepository: WorkoutSessionRepository = customSessionRepository
+    ?: WorkoutSessionRepository(database.workoutSessionDao())
+
   val recentPlans: StateFlow<List<LoadingPlanEntity>> = repository.recentPlans
     .stateIn(
       scope = viewModelScope,
       started = SharingStarted.WhileSubscribed(5000),
       initialValue = emptyList()
+    )
+
+  val recentSessions: StateFlow<List<WorkoutSessionEntity>> = sessionRepository.recentSessions
+    .stateIn(
+      scope = viewModelScope,
+      started = SharingStarted.WhileSubscribed(5000),
+      initialValue = emptyList()
+    )
+
+  val sessionProgressions: StateFlow<Map<Long, SessionProgression>> = recentSessions
+    .map { WorkoutSessionRepository.computeSessionProgressions(it) }
+    .stateIn(
+      scope = viewModelScope,
+      started = SharingStarted.WhileSubscribed(5000),
+      initialValue = emptyMap()
     )
 
   private val _uiState = MutableStateFlow(BarbellUiState())
@@ -452,6 +475,80 @@ class BarbellViewModel @JvmOverloads constructor(
   fun clearHistory() {
     viewModelScope.launch {
       repository.clearHistory()
+    }
+  }
+
+  // Workout Session Logging actions
+  fun saveCurrentSession(
+    liftName: String = "General",
+    reps: String = "",
+    notes: String = ""
+  ) {
+    val state = _uiState.value
+    val result = state.calculationResult
+    val cleanLift = liftName.trim().ifBlank { "General" }
+    val platesSummary = result.platesPerSide.joinToString(",") {
+      "${it.plate.weight}:${it.quantity}"
+    }
+    val barWeight = getEffectiveBarWeight()
+
+    val session = WorkoutSessionEntity(
+      timestamp = System.currentTimeMillis(),
+      liftName = cleanLift,
+      reps = reps.trim(),
+      notes = notes.trim(),
+      targetWeight = result.targetWeight,
+      achievedWeight = result.achievedTotalWeight,
+      unit = state.unit.name,
+      barId = state.selectedBar.id,
+      barName = state.selectedBar.name,
+      barWeight = barWeight,
+      customBarWeight = state.customBarWeight,
+      collarsEnabled = state.collarsEnabled,
+      platesSummary = platesSummary,
+      totalPlatesOnBar = result.totalPlatesOnBar,
+      isExact = result.isExact
+    )
+
+    viewModelScope.launch {
+      sessionRepository.saveSession(session)
+    }
+  }
+
+  fun loadSession(session: WorkoutSessionEntity) {
+    val unit = if (session.unit == WeightUnit.KG.name) WeightUnit.KG else WeightUnit.LBS
+    val bar = BarType.ALL_PRESETS.firstOrNull { it.id == session.barId }
+      ?: BarType(
+        id = session.barId,
+        name = session.barName,
+        weightLbs = session.barWeight,
+        weightKg = session.barWeight,
+        description = session.barName,
+        isCustom = session.barId == "custom"
+      )
+
+    _uiState.update {
+      it.copy(
+        targetWeight = session.targetWeight,
+        unit = unit,
+        selectedBar = bar,
+        customBarWeight = session.customBarWeight,
+        collarsEnabled = session.collarsEnabled,
+        activeTab = 0
+      )
+    }
+    recalculate(triggerAutoSave = false)
+  }
+
+  fun deleteSession(id: Long) {
+    viewModelScope.launch {
+      sessionRepository.deleteSessionById(id)
+    }
+  }
+
+  fun clearAllSessions() {
+    viewModelScope.launch {
+      sessionRepository.clearSessions()
     }
   }
 

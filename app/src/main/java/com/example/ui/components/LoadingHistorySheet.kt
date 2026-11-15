@@ -3,6 +3,7 @@ package com.example.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,6 +44,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,6 +57,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.entity.LoadingPlanEntity
+import com.example.data.entity.WorkoutSessionEntity
+import com.example.data.repository.SessionProgression
 import com.example.model.WeightUnit
 import com.example.ui.theme.PlateBlack
 import com.example.ui.theme.PlateBlue
@@ -73,10 +78,30 @@ fun LoadingHistorySheet(
   onDeletePlan: (Long) -> Unit,
   onClearAll: () -> Unit,
   onDismiss: () -> Unit,
+  recentSessions: List<WorkoutSessionEntity> = emptyList(),
+  sessionProgressions: Map<Long, SessionProgression> = emptyMap(),
+  onSelectSession: (WorkoutSessionEntity) -> Unit = {},
+  onDeleteSession: (Long) -> Unit = {},
+  onClearAllSessions: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
   var showClearConfirmDialog by remember { mutableStateOf(false) }
+  var selectedTab by remember { mutableIntStateOf(0) } // 0: Recent Sessions, 1: Auto-Saved Plans
+  var selectedLiftFilter by remember { mutableStateOf("All") }
+
+  val liftFilters = remember(recentSessions) {
+    val distinctLifts = recentSessions.map { it.liftName }.distinct()
+    listOf("All") + distinctLifts
+  }
+
+  val filteredSessions = remember(recentSessions, selectedLiftFilter) {
+    if (selectedLiftFilter == "All") {
+      recentSessions
+    } else {
+      recentSessions.filter { it.liftName == selectedLiftFilter }
+    }
+  }
 
   ModalBottomSheet(
     onDismissRequest = onDismiss,
@@ -95,7 +120,7 @@ fun LoadingHistorySheet(
       Row(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(bottom = 16.dp),
+          .padding(bottom = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
@@ -120,20 +145,25 @@ fun LoadingHistorySheet(
 
           Column {
             Text(
-              text = "Recent Plans",
+              text = if (selectedTab == 0) "Recent Sessions" else "Auto-Saved Plans",
               style = MaterialTheme.typography.titleLarge,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-              text = if (recentPlans.isNotEmpty()) "${recentPlans.size} of 10 workouts saved" else "Up to 10 workouts kept",
+              text = if (selectedTab == 0) {
+                if (recentSessions.isNotEmpty()) "${recentSessions.size} logged sessions" else "Track your lift progression over time"
+              } else {
+                if (recentPlans.isNotEmpty()) "${recentPlans.size} of 10 auto-saved" else "Up to 10 calculations kept"
+              },
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
           }
         }
 
-        if (recentPlans.isNotEmpty()) {
+        val canClear = if (selectedTab == 0) recentSessions.isNotEmpty() else recentPlans.isNotEmpty()
+        if (canClear) {
           TextButton(
             onClick = { showClearConfirmDialog = true },
             modifier = Modifier.testTag("clear_history_button")
@@ -153,92 +183,310 @@ fun LoadingHistorySheet(
         }
       }
 
-      // Body: List or Empty State
-      if (recentPlans.isEmpty()) {
-        Card(
-          shape = RoundedCornerShape(20.dp),
-          colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-          ),
+      // Segmented Tab Switcher
+      Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(bottom = 12.dp)
+      ) {
+        Row(
           modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 24.dp)
-            .testTag("empty_history_indicator")
+            .padding(4.dp),
+          horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-          Column(
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = if (selectedTab == 0) MaterialTheme.colorScheme.surface else Color.Transparent,
+            shadowElevation = if (selectedTab == 0) 1.dp else 0.dp,
             modifier = Modifier
-              .fillMaxWidth()
-              .padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+              .weight(1f)
+              .clip(RoundedCornerShape(10.dp))
+              .clickable { selectedTab = 0 }
+              .testTag("history_tab_sessions")
           ) {
-            Box(
-              modifier = Modifier
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
-              contentAlignment = Alignment.Center
-            ) {
-              Icon(
-                imageVector = Icons.Default.History,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp)
-              )
-            }
             Text(
-              text = "No Saved Workouts Yet",
-              style = MaterialTheme.typography.titleMedium,
+              text = "Recent Sessions (${recentSessions.size})",
+              style = MaterialTheme.typography.labelMedium,
               fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onSurface
+              color = if (selectedTab == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
+              textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
+          }
+
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = if (selectedTab == 1) MaterialTheme.colorScheme.surface else Color.Transparent,
+            shadowElevation = if (selectedTab == 1) 1.dp else 0.dp,
+            modifier = Modifier
+              .weight(1f)
+              .clip(RoundedCornerShape(10.dp))
+              .clickable { selectedTab = 1 }
+              .testTag("history_tab_autosaved")
+          ) {
             Text(
-              text = "Calculate any target weight on the barbell and your last 10 loading plans will automatically be preserved here for instant recall.",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              text = "Auto-Saved (${recentPlans.size})",
+              style = MaterialTheme.typography.labelMedium,
+              fontWeight = FontWeight.Bold,
+              color = if (selectedTab == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
               textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
           }
         }
-      } else {
-        LazyColumn(
-          modifier = Modifier
-            .fillMaxWidth()
-            .height(420.dp),
-          verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-          items(
-            items = recentPlans,
-            key = { it.id }
-          ) { plan ->
-            HistoryPlanCard(
-              plan = plan,
-              onSelect = {
-                onSelectPlan(plan)
-                onDismiss()
-              },
-              onDelete = { onDeletePlan(plan.id) }
-            )
+      }
+
+      if (selectedTab == 0) {
+        if (recentSessions.isEmpty()) {
+          Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+              containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ),
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(vertical = 20.dp)
+              .testTag("empty_sessions_sheet_indicator")
+          ) {
+            Column(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(28.dp),
+              horizontalAlignment = Alignment.CenterHorizontally,
+              verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+              Box(
+                modifier = Modifier
+                  .size(52.dp)
+                  .clip(CircleShape)
+                  .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  imageVector = Icons.Default.History,
+                  contentDescription = null,
+                  tint = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.size(26.dp)
+                )
+              }
+              Text(
+                text = "No Logged Sessions Yet",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+              )
+              Text(
+                text = "Use \"Save to Recent Sessions\" on the Calculator to log your lifts and track progression deltas and PRs over time.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+              )
+            }
+          }
+        } else {
+          // Lift Filter Chips
+          if (liftFilters.size > 2) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(bottom = 10.dp),
+              horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+              liftFilters.forEach { lift ->
+                val isSelected = selectedLiftFilter == lift
+                Surface(
+                  shape = RoundedCornerShape(10.dp),
+                  color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                  modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { selectedLiftFilter = lift }
+                ) {
+                  Text(
+                    text = lift,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                  )
+                }
+              }
+            }
           }
 
-          item {
-            Spacer(modifier = Modifier.height(16.dp))
+          // Progression Summary Banner for filtered sessions
+          val bestSession = filteredSessions.maxByOrNull { it.achievedWeight }
+          if (bestSession != null) {
+            Surface(
+              shape = RoundedCornerShape(14.dp),
+              color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 10.dp)
+            ) {
+              Row(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+              ) {
+                Column {
+                  Text(
+                    text = if (selectedLiftFilter == "All") "Top Logged Load" else "$selectedLiftFilter Best",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                  )
+                  Text(
+                    text = bestSession.formattedAchievedWeight(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.primary
+                  )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                  Text(
+                    text = "Sessions",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                  )
+                  Text(
+                    text = "${filteredSessions.size}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                  )
+                }
+              }
+            }
+          }
+
+          LazyColumn(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(380.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+          ) {
+            items(
+              items = filteredSessions,
+              key = { it.id }
+            ) { session ->
+              WorkoutSessionRow(
+                session = session,
+                progression = sessionProgressions[session.id],
+                onSelect = {
+                  onSelectSession(session)
+                  onDismiss()
+                },
+                onDelete = { onDeleteSession(session.id) }
+              )
+            }
+            item {
+              Spacer(modifier = Modifier.height(16.dp))
+            }
+          }
+        }
+      } else {
+        // Auto-saved plans tab
+        if (recentPlans.isEmpty()) {
+          Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(
+              containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ),
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(vertical = 24.dp)
+              .testTag("empty_history_indicator")
+          ) {
+            Column(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+              horizontalAlignment = Alignment.CenterHorizontally,
+              verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+              Box(
+                modifier = Modifier
+                  .size(56.dp)
+                  .clip(CircleShape)
+                  .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  imageVector = Icons.Default.History,
+                  contentDescription = null,
+                  tint = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.size(28.dp)
+                )
+              }
+              Text(
+                text = "No Auto-Saved Plans Yet",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+              )
+              Text(
+                text = "Calculate any target weight on the barbell and your last 10 loading plans will automatically be preserved here for instant recall.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+              )
+            }
+          }
+        } else {
+          LazyColumn(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(400.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+          ) {
+            items(
+              items = recentPlans,
+              key = { it.id }
+            ) { plan ->
+              HistoryPlanCard(
+                plan = plan,
+                onSelect = {
+                  onSelectPlan(plan)
+                  onDismiss()
+                },
+                onDelete = { onDeletePlan(plan.id) }
+              )
+            }
+
+            item {
+              Spacer(modifier = Modifier.height(16.dp))
+            }
           }
         }
       }
     }
   }
 
-  // Confirmation dialog for clearing all plans
+  // Confirmation dialog for clearing all items in active tab
   if (showClearConfirmDialog) {
     AlertDialog(
       onDismissRequest = { showClearConfirmDialog = false },
-      title = { Text("Clear All History?") },
-      text = { Text("Are you sure you want to remove all saved loading plans? This action cannot be undone.") },
+      title = {
+        Text(if (selectedTab == 0) "Clear All Recent Sessions?" else "Clear Auto-Saved Plans?")
+      },
+      text = {
+        Text(
+          if (selectedTab == 0) {
+            "Are you sure you want to remove all logged workout sessions? This action cannot be undone."
+          } else {
+            "Are you sure you want to remove all auto-saved loading plans? This action cannot be undone."
+          }
+        )
+      },
       confirmButton = {
         TextButton(
           onClick = {
-            onClearAll()
+            if (selectedTab == 0) onClearAllSessions() else onClearAll()
             showClearConfirmDialog = false
           }
         ) {

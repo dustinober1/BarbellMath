@@ -43,6 +43,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -54,6 +56,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,9 +74,12 @@ import com.example.ui.components.InventoryManagerSheet
 import com.example.ui.components.InventorySettingsScreen
 import com.example.ui.components.LoadingHistorySheet
 import com.example.ui.components.PlateBreakdownCard
+import com.example.ui.components.RecentSessionsCard
 import com.example.ui.components.ReversePlateBuilderSection
+import com.example.ui.components.SaveSessionDialog
 import com.example.ui.components.TargetWeightControlCard
 import com.example.ui.components.WarmupLadderSection
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,10 +89,15 @@ fun BarbellAppScreen(
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val recentPlans by viewModel.recentPlans.collectAsStateWithLifecycle()
+  val recentSessions by viewModel.recentSessions.collectAsStateWithLifecycle()
+  val sessionProgressions by viewModel.sessionProgressions.collectAsStateWithLifecycle()
 
   var isBarSelectorSheetOpen by remember { mutableStateOf(false) }
   var isInventorySheetOpen by remember { mutableStateOf(false) }
   var isHistorySheetOpen by remember { mutableStateOf(false) }
+  var isSaveSessionDialogOpen by remember { mutableStateOf(false) }
+  val snackbarHostState = remember { SnackbarHostState() }
+  val coroutineScope = rememberCoroutineScope()
 
   val effectiveBarWeight = if (uiState.selectedBar.isCustom) {
     uiState.customBarWeight
@@ -96,6 +107,7 @@ fun BarbellAppScreen(
 
   Scaffold(
     modifier = modifier.fillMaxSize(),
+    snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
     topBar = {
       Row(
         modifier = Modifier
@@ -125,11 +137,12 @@ fun BarbellAppScreen(
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+          val historyBadgeCount = if (recentSessions.isNotEmpty()) recentSessions.size else recentPlans.size
           IconButton(
             onClick = { isHistorySheetOpen = true },
             modifier = Modifier.testTag("open_history_button")
           ) {
-            if (recentPlans.isNotEmpty()) {
+            if (historyBadgeCount > 0) {
               BadgedBox(
                 badge = {
                   Badge(
@@ -137,7 +150,7 @@ fun BarbellAppScreen(
                     contentColor = MaterialTheme.colorScheme.onPrimary
                   ) {
                     Text(
-                      text = "${recentPlans.size}",
+                      text = "$historyBadgeCount",
                       fontSize = 10.sp,
                       fontWeight = FontWeight.Bold
                     )
@@ -312,7 +325,19 @@ fun BarbellAppScreen(
         item {
           PlateBreakdownCard(
             result = uiState.calculationResult,
-            onOpenInventorySettings = { viewModel.setActiveTab(3) }
+            onOpenInventorySettings = { viewModel.setActiveTab(3) },
+            onSaveSession = { isSaveSessionDialogOpen = true }
+          )
+        }
+
+        item {
+          RecentSessionsCard(
+            sessions = recentSessions,
+            progressions = sessionProgressions,
+            onSaveCurrentSession = { isSaveSessionDialogOpen = true },
+            onSelectSession = { viewModel.loadSession(it) },
+            onDeleteSession = { viewModel.deleteSession(it) },
+            onViewAllSessions = { isHistorySheetOpen = true }
           )
         }
       }
@@ -431,7 +456,33 @@ fun BarbellAppScreen(
       onSelectPlan = { viewModel.loadPlan(it) },
       onDeletePlan = { viewModel.deleteHistoryPlan(it) },
       onClearAll = { viewModel.clearHistory() },
+      recentSessions = recentSessions,
+      sessionProgressions = sessionProgressions,
+      onSelectSession = { viewModel.loadSession(it) },
+      onDeleteSession = { viewModel.deleteSession(it) },
+      onClearAllSessions = { viewModel.clearAllSessions() },
       onDismiss = { isHistorySheetOpen = false }
+    )
+  }
+
+  // Save Session Dialog
+  if (isSaveSessionDialogOpen) {
+    SaveSessionDialog(
+      calculationResult = uiState.calculationResult,
+      barName = uiState.selectedBar.name,
+      onDismiss = { isSaveSessionDialogOpen = false },
+      onSave = { liftName, reps, notes ->
+        val formattedLoad = uiState.unit.format(uiState.calculationResult.achievedTotalWeight)
+        viewModel.saveCurrentSession(
+          liftName = liftName,
+          reps = reps,
+          notes = notes
+        )
+        isSaveSessionDialogOpen = false
+        coroutineScope.launch {
+          snackbarHostState.showSnackbar("Saved $formattedLoad ($liftName) to Recent Sessions")
+        }
+      }
     )
   }
 }

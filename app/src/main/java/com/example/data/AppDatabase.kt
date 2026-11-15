@@ -8,18 +8,21 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.dao.LoadingPlanDao
 import com.example.data.dao.PlateInventoryDao
+import com.example.data.dao.WorkoutSessionDao
 import com.example.data.entity.LoadingPlanEntity
 import com.example.data.entity.PlateInventoryEntity
+import com.example.data.entity.WorkoutSessionEntity
 
 @Database(
-  entities = [LoadingPlanEntity::class, PlateInventoryEntity::class],
-  version = 2,
+  entities = [LoadingPlanEntity::class, PlateInventoryEntity::class, WorkoutSessionEntity::class],
+  version = 3,
   exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
   abstract fun loadingPlanDao(): LoadingPlanDao
   abstract fun plateInventoryDao(): PlateInventoryDao
+  abstract fun workoutSessionDao(): WorkoutSessionDao
 
   companion object {
     @Volatile
@@ -50,6 +53,33 @@ abstract class AppDatabase : RoomDatabase() {
       }
     }
 
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+          """
+          CREATE TABLE IF NOT EXISTS `workout_sessions` (
+            `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            `timestamp` INTEGER NOT NULL,
+            `liftName` TEXT NOT NULL,
+            `reps` TEXT NOT NULL,
+            `notes` TEXT NOT NULL,
+            `targetWeight` REAL NOT NULL,
+            `achievedWeight` REAL NOT NULL,
+            `unit` TEXT NOT NULL,
+            `barId` TEXT NOT NULL,
+            `barName` TEXT NOT NULL,
+            `barWeight` REAL NOT NULL,
+            `customBarWeight` REAL NOT NULL,
+            `collarsEnabled` INTEGER NOT NULL,
+            `platesSummary` TEXT NOT NULL,
+            `totalPlatesOnBar` INTEGER NOT NULL,
+            `isExact` INTEGER NOT NULL
+          )
+          """.trimIndent()
+        )
+      }
+    }
+
     fun getInstance(context: Context): AppDatabase {
       return INSTANCE ?: synchronized(this) {
         val instance = Room.databaseBuilder(
@@ -57,7 +87,7 @@ abstract class AppDatabase : RoomDatabase() {
           AppDatabase::class.java,
           "plate_master_database"
         )
-          .addMigrations(MIGRATION_1_2)
+          .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
           .fallbackToDestructiveMigration()
           .build()
         INSTANCE = instance

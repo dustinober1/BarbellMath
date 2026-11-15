@@ -17,11 +17,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +47,7 @@ import com.example.ui.theme.PlateGreen
 fun PlateBreakdownCard(
   result: PlateCalculationResult,
   onOpenInventorySettings: () -> Unit = {},
+  onSaveSession: (() -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
   Card(
@@ -351,6 +354,27 @@ fun PlateBreakdownCard(
           fontWeight = FontWeight.Black,
           color = MaterialTheme.colorScheme.primary
         )
+      }
+
+      if (onSaveSession != null) {
+        Spacer(modifier = Modifier.height(14.dp))
+        FilledTonalButton(
+          onClick = onSaveSession,
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("save_session_button")
+        ) {
+          Icon(
+            imageVector = Icons.Default.BookmarkAdd,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp)
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(
+            text = "Save to Recent Sessions",
+            fontWeight = FontWeight.Bold
+          )
+        }
       }
 
       // Equipment Gathering Summary (Total Plates to Grab from Gym Rack)
