@@ -1,12 +1,14 @@
 package com.example.ui
 
 import android.app.Application
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.calculator.BarbellCalculator
 import com.example.data.AppDatabase
 import com.example.data.entity.LoadingPlanEntity
 import com.example.data.repository.LoadingPlanRepository
+import com.example.data.repository.PlateInventoryRepository
 import com.example.model.BarType
 import com.example.model.Plate
 import com.example.model.PlateCalculationResult
@@ -19,9 +21,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 data class BarbellUiState(
   val targetWeight: Double = 135.0,
@@ -45,16 +50,22 @@ data class BarbellUiState(
   val reverseTotalWeight: Double = 45.0,
   val isFullBarView: Boolean = false,
   val showPlateLabels: Boolean = true,
-  val activeTab: Int = 0 // 0: Plate Calculator, 1: Warm-up Ladder, 2: Reverse Racker
+  val activeTab: Int = 0 // 0: Plate Calculator, 1: Warm-up Ladder, 2: Reverse Racker, 3: Settings
 )
 
 class BarbellViewModel @JvmOverloads constructor(
   application: Application,
-  customRepository: LoadingPlanRepository? = null
+  customRepository: LoadingPlanRepository? = null,
+  customPlateRepository: PlateInventoryRepository? = null
 ) : AndroidViewModel(application) {
 
+  private val database by lazy { AppDatabase.getInstance(application) }
+
   private val repository: LoadingPlanRepository = customRepository
-    ?: LoadingPlanRepository(AppDatabase.getInstance(application).loadingPlanDao())
+    ?: LoadingPlanRepository(database.loadingPlanDao())
+
+  private val plateRepository: PlateInventoryRepository = customPlateRepository
+    ?: PlateInventoryRepository(database.plateInventoryDao())
 
   val recentPlans: StateFlow<List<LoadingPlanEntity>> = repository.recentPlans
     .stateIn(
@@ -67,9 +78,31 @@ class BarbellViewModel @JvmOverloads constructor(
   val uiState: StateFlow<BarbellUiState> = _uiState.asStateFlow()
 
   private var autoSaveJob: Job? = null
+  @Volatile
+  private var hasLocalInventoryMutation = false
 
   init {
     recalculate(triggerAutoSave = false)
+    viewModelScope.launch {
+      plateRepository.ensureSeeded()
+      if (hasLocalInventoryMutation) {
+        val current = _uiState.value
+        plateRepository.replaceAllPlates(current.lbsPlates, current.kgPlates)
+      }
+      combine(plateRepository.lbsPlates, plateRepository.kgPlates) { lbs, kg ->
+        lbs to kg
+      }.collect { (lbs, kg) ->
+        if (lbs.isNotEmpty() || kg.isNotEmpty()) {
+          _uiState.update { state ->
+            state.copy(
+              lbsPlates = if (lbs.isNotEmpty()) lbs else state.lbsPlates,
+              kgPlates = if (kg.isNotEmpty()) kg else state.kgPlates
+            )
+          }
+          recalculate(triggerAutoSave = false)
+        }
+      }
+    }
   }
 
   fun setTargetWeight(weight: Double) {
@@ -79,7 +112,7 @@ class BarbellViewModel @JvmOverloads constructor(
   }
 
   fun adjustTargetWeight(delta: Double) {
-    val newWeight = maxOf(0.0, _uiState.value.targetWeight + delta)
+    val newWeight = maxOf(0.0, ((_uiState.value.targetWeight + delta) * 100.0).roundToInt() / 100.0)
     _uiState.update { it.copy(targetWeight = newWeight) }
     recalculate()
   }
@@ -87,19 +120,17 @@ class BarbellViewModel @JvmOverloads constructor(
   fun setUnit(unit: WeightUnit) {
     if (_uiState.value.unit == unit) return
     val currentWeight = _uiState.value.targetWeight
-    // Smart converted target weight
     val convertedWeight = if (unit == WeightUnit.KG) {
-      // lbs -> kg rounded to 2.5kg
       maxOf(20.0, (currentWeight * 0.45359237 / 2.5).toInt() * 2.5)
     } else {
-      // kg -> lbs rounded to 5lbs
       maxOf(45.0, (currentWeight * 2.20462 / 5.0).toInt() * 5.0)
     }
 
     _uiState.update {
       it.copy(
         unit = unit,
-        targetWeight = convertedWeight
+        targetWeight = convertedWeight,
+        reversePlatesPerSide = emptyList()
       )
     }
     recalculate()
@@ -137,51 +168,203 @@ class BarbellViewModel @JvmOverloads constructor(
   }
 
   fun togglePlateEnabled(plateWeight: Double) {
+    hasLocalInventoryMutation = true
+    val activeUnit = _uiState.value.unit
+    var newEnabled = true
+
     _uiState.update { state ->
-      if (state.unit == WeightUnit.LBS) {
+      if (activeUnit == WeightUnit.LBS) {
         val updated = state.lbsPlates.map {
-          if (it.weight == plateWeight) it.copy(isEnabled = !it.isEnabled) else it
+          if (abs(it.weight - plateWeight) < 0.001) {
+            newEnabled = !it.isEnabled
+            it.copy(isEnabled = newEnabled)
+          } else it
         }
         state.copy(lbsPlates = updated)
       } else {
         val updated = state.kgPlates.map {
-          if (it.weight == plateWeight) it.copy(isEnabled = !it.isEnabled) else it
+          if (abs(it.weight - plateWeight) < 0.001) {
+            newEnabled = !it.isEnabled
+            it.copy(isEnabled = newEnabled)
+          } else it
         }
         state.copy(kgPlates = updated)
       }
     }
+    syncReverseRackWithInventory()
     recalculate()
+
+    viewModelScope.launch {
+      plateRepository.setPlateEnabled(activeUnit, plateWeight, newEnabled)
+    }
   }
 
   fun updatePlateAvailablePairs(plateWeight: Double, pairs: Int) {
+    hasLocalInventoryMutation = true
     val cleanPairs = maxOf(0, pairs)
+    val activeUnit = _uiState.value.unit
+
     _uiState.update { state ->
-      if (state.unit == WeightUnit.LBS) {
+      if (activeUnit == WeightUnit.LBS) {
         val updated = state.lbsPlates.map {
-          if (it.weight == plateWeight) it.copy(availablePairs = cleanPairs) else it
+          if (abs(it.weight - plateWeight) < 0.001) it.copy(availablePairs = cleanPairs) else it
         }
         state.copy(lbsPlates = updated)
       } else {
         val updated = state.kgPlates.map {
-          if (it.weight == plateWeight) it.copy(availablePairs = cleanPairs) else it
+          if (abs(it.weight - plateWeight) < 0.001) it.copy(availablePairs = cleanPairs) else it
         }
         state.copy(kgPlates = updated)
       }
     }
+    syncReverseRackWithInventory()
     recalculate()
+
+    viewModelScope.launch {
+      plateRepository.setAvailablePairs(activeUnit, plateWeight, cleanPairs)
+    }
+  }
+
+  fun addCustomPlate(
+    weight: Double,
+    color: Color,
+    availablePairs: Int
+  ): String? {
+    val cleanWeight = (weight * 100.0).roundToInt() / 100.0
+    if (cleanWeight <= 0.0 || cleanWeight > 500.0) {
+      return "Enter a plate weight between 0.01 and 500"
+    }
+
+    val activeUnit = _uiState.value.unit
+    val existingList = if (activeUnit == WeightUnit.LBS) _uiState.value.lbsPlates else _uiState.value.kgPlates
+    if (existingList.any { abs(it.weight - cleanWeight) < 0.001 }) {
+      return "A ${Plate.formatWeight(cleanWeight)} ${activeUnit.shortLabel} plate already exists"
+    }
+
+    hasLocalInventoryMutation = true
+    val newPlate = Plate.createCustom(
+      weight = cleanWeight,
+      unit = activeUnit,
+      color = color,
+      availablePairs = availablePairs,
+      isEnabled = true
+    )
+
+    _uiState.update { state ->
+      if (activeUnit == WeightUnit.LBS) {
+        state.copy(lbsPlates = (state.lbsPlates + newPlate).sortedByDescending { it.weight })
+      } else {
+        state.copy(kgPlates = (state.kgPlates + newPlate).sortedByDescending { it.weight })
+      }
+    }
+    recalculate()
+
+    viewModelScope.launch {
+      plateRepository.addCustomPlate(
+        weight = cleanWeight,
+        unit = activeUnit,
+        color = color,
+        availablePairs = availablePairs
+      )
+    }
+    return null
+  }
+
+  fun updateCustomPlate(
+    originalPlate: Plate,
+    newWeight: Double,
+    color: Color,
+    availablePairs: Int
+  ): String? {
+    val cleanWeight = (newWeight * 100.0).roundToInt() / 100.0
+    if (cleanWeight <= 0.0 || cleanWeight > 500.0) {
+      return "Enter a plate weight between 0.01 and 500"
+    }
+
+    val activeUnit = originalPlate.unit
+    val existingList = if (activeUnit == WeightUnit.LBS) _uiState.value.lbsPlates else _uiState.value.kgPlates
+    val hasConflict = existingList.any {
+      abs(it.weight - cleanWeight) < 0.001 && abs(it.weight - originalPlate.weight) >= 0.001
+    }
+    if (hasConflict) {
+      return "A ${Plate.formatWeight(cleanWeight)} ${activeUnit.shortLabel} plate already exists"
+    }
+
+    hasLocalInventoryMutation = true
+    val updatedPlate = Plate.createCustom(
+      weight = cleanWeight,
+      unit = activeUnit,
+      color = color,
+      availablePairs = availablePairs,
+      isEnabled = originalPlate.isEnabled,
+      id = originalPlate.id
+    )
+
+    _uiState.update { state ->
+      if (activeUnit == WeightUnit.LBS) {
+        val updated = state.lbsPlates.map {
+          if (abs(it.weight - originalPlate.weight) < 0.001) updatedPlate else it
+        }.sortedByDescending { it.weight }
+        state.copy(lbsPlates = updated)
+      } else {
+        val updated = state.kgPlates.map {
+          if (abs(it.weight - originalPlate.weight) < 0.001) updatedPlate else it
+        }.sortedByDescending { it.weight }
+        state.copy(kgPlates = updated)
+      }
+    }
+    syncReverseRackWithInventory()
+    recalculate()
+
+    viewModelScope.launch {
+      plateRepository.updateCustomPlate(
+        plateId = originalPlate.id,
+        originalWeight = originalPlate.weight,
+        newWeight = cleanWeight,
+        unit = activeUnit,
+        color = color,
+        availablePairs = availablePairs,
+        isEnabled = originalPlate.isEnabled
+      )
+    }
+    return null
+  }
+
+  fun deleteCustomPlate(plate: Plate) {
+    hasLocalInventoryMutation = true
+    _uiState.update { state ->
+      if (plate.unit == WeightUnit.LBS) {
+        state.copy(lbsPlates = state.lbsPlates.filterNot { abs(it.weight - plate.weight) < 0.001 })
+      } else {
+        state.copy(kgPlates = state.kgPlates.filterNot { abs(it.weight - plate.weight) < 0.001 })
+      }
+    }
+    syncReverseRackWithInventory()
+    recalculate()
+
+    viewModelScope.launch {
+      plateRepository.deleteCustomPlate(plate)
+    }
   }
 
   fun resetPlateInventory() {
+    hasLocalInventoryMutation = true
     _uiState.update {
       it.copy(
         lbsPlates = Plate.DEFAULT_LBS_PLATES,
         kgPlates = Plate.DEFAULT_KG_PLATES
       )
     }
+    syncReverseRackWithInventory()
     recalculate()
+
+    viewModelScope.launch {
+      plateRepository.resetToDefaults()
+    }
   }
 
   fun exclude35LbPlates() {
+    hasLocalInventoryMutation = true
     _uiState.update { state ->
       val updatedLbs = state.lbsPlates.map {
         if (it.weight == 35.0) it.copy(isEnabled = false) else it
@@ -191,19 +374,30 @@ class BarbellViewModel @JvmOverloads constructor(
       }
       state.copy(lbsPlates = updatedLbs, kgPlates = updatedKg)
     }
+    syncReverseRackWithInventory()
     recalculate()
+
+    viewModelScope.launch {
+      plateRepository.exclude35LbAnd15Kg()
+    }
   }
 
   fun enableAllPlates() {
+    hasLocalInventoryMutation = true
     _uiState.update { state ->
       val updatedLbs = state.lbsPlates.map { it.copy(isEnabled = true) }
       val updatedKg = state.kgPlates.map { it.copy(isEnabled = true) }
       state.copy(lbsPlates = updatedLbs, kgPlates = updatedKg)
     }
     recalculate()
+
+    viewModelScope.launch {
+      plateRepository.enableAllPlates()
+    }
   }
 
   fun applyMinimalistPreset() {
+    hasLocalInventoryMutation = true
     _uiState.update { state ->
       val updatedLbs = state.lbsPlates.map {
         val keep = it.weight in listOf(45.0, 25.0, 10.0, 5.0, 2.5)
@@ -215,7 +409,12 @@ class BarbellViewModel @JvmOverloads constructor(
       }
       state.copy(lbsPlates = updatedLbs, kgPlates = updatedKg)
     }
+    syncReverseRackWithInventory()
     recalculate()
+
+    viewModelScope.launch {
+      plateRepository.applyMinimalistPreset()
+    }
   }
 
   // Load a previously saved plan from Room database
@@ -258,15 +457,19 @@ class BarbellViewModel @JvmOverloads constructor(
 
   // Reverse Racker actions
   fun addReversePlate(plate: Plate) {
+    val activeList = if (_uiState.value.unit == WeightUnit.LBS) _uiState.value.lbsPlates else _uiState.value.kgPlates
+    val inventoryPlate = activeList.firstOrNull { abs(it.weight - plate.weight) < 0.001 } ?: plate
+    if (!inventoryPlate.isEnabled || inventoryPlate.availablePairs <= 0) return
+
     val currentPlates = _uiState.value.reversePlatesPerSide.toMutableList()
-    val existingIndex = currentPlates.indexOfFirst { it.plate.weight == plate.weight }
+    val existingIndex = currentPlates.indexOfFirst { abs(it.plate.weight - plate.weight) < 0.001 }
     if (existingIndex >= 0) {
       val item = currentPlates[existingIndex]
-      currentPlates[existingIndex] = item.copy(quantity = item.quantity + 1)
+      if (item.quantity >= inventoryPlate.availablePairs) return
+      currentPlates[existingIndex] = item.copy(plate = inventoryPlate, quantity = item.quantity + 1)
     } else {
-      currentPlates.add(PlateCount(plate, 1))
+      currentPlates.add(PlateCount(inventoryPlate, 1))
     }
-    // Sort heaviest inside
     currentPlates.sortByDescending { it.plate.weight }
 
     val barWeight = getEffectiveBarWeight()
@@ -283,7 +486,7 @@ class BarbellViewModel @JvmOverloads constructor(
 
   fun removeReversePlate(plate: Plate) {
     val currentPlates = _uiState.value.reversePlatesPerSide.toMutableList()
-    val existingIndex = currentPlates.indexOfFirst { it.plate.weight == plate.weight }
+    val existingIndex = currentPlates.indexOfFirst { abs(it.plate.weight - plate.weight) < 0.001 }
     if (existingIndex >= 0) {
       val item = currentPlates[existingIndex]
       if (item.quantity > 1) {
@@ -324,6 +527,23 @@ class BarbellViewModel @JvmOverloads constructor(
       )
     }
     recalculate()
+  }
+
+  private fun syncReverseRackWithInventory() {
+    val state = _uiState.value
+    val activeInventory = if (state.unit == WeightUnit.LBS) state.lbsPlates else state.kgPlates
+    val filteredReverse = state.reversePlatesPerSide.mapNotNull { loaded ->
+      val match = activeInventory.firstOrNull {
+        abs(it.weight - loaded.plate.weight) < 0.001 && it.isEnabled && it.availablePairs > 0
+      }
+      match?.let {
+        val cappedQty = minOf(loaded.quantity, it.availablePairs)
+        if (cappedQty > 0) loaded.copy(plate = it, quantity = cappedQty) else null
+      }
+    }
+    if (filteredReverse != state.reversePlatesPerSide) {
+      _uiState.update { it.copy(reversePlatesPerSide = filteredReverse) }
+    }
   }
 
   private fun getEffectiveBarWeight(): Double {

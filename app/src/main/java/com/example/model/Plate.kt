@@ -20,14 +20,78 @@ data class Plate(
   val thicknessFraction: Float, // Relative width
   val isEnabled: Boolean = true,
   val availablePairs: Int = 10, // Available pairs in gym
+  val id: Long = 0L,
+  val isCustom: Boolean = false
 ) {
   val formattedWeight: String
-    get() = if (weight % 1.0 == 0.0) "${weight.toInt()}" else "$weight"
+    get() = formatWeight(weight)
 
   val displayLabel: String
     get() = "$formattedWeight ${unit.shortLabel}"
 
   companion object {
+    val COLOR_PALETTE: List<Pair<String, Color>> = listOf(
+      "Red" to PlateRed,
+      "Blue" to PlateBlue,
+      "Yellow" to PlateYellow,
+      "Green" to PlateGreen,
+      "White" to PlateWhite,
+      "Black" to PlateBlack,
+      "Purple" to PlatePurple,
+      "Cyan" to PlateCyan,
+      "Orange" to PlateOrange,
+      "Silver" to Color(0xFF94A3B8)
+    )
+
+    fun formatWeight(weight: Double): String {
+      val rounded = kotlin.math.round(weight * 100.0) / 100.0
+      if (rounded % 1.0 == 0.0) return "${rounded.toInt()}"
+      val formatted = String.format(java.util.Locale.US, "%.2f", rounded)
+        .trimEnd('0')
+        .trimEnd('.')
+      return formatted
+    }
+
+    fun contrastingTextColor(background: Color): Color {
+      val luminance = (0.299f * background.red) + (0.587f * background.green) + (0.114f * background.blue)
+      return if (luminance > 0.62f) Color.Black else Color.White
+    }
+
+    fun computeHeightRatio(weight: Double, unit: WeightUnit): Float {
+      val maxStandard = if (unit == WeightUnit.LBS) 45.0 else 25.0
+      val normalized = (weight / maxStandard).coerceIn(0.0, 1.2)
+      return (0.26f + 0.74f * kotlin.math.sqrt(normalized).toFloat()).coerceIn(0.25f, 1.0f)
+    }
+
+    fun computeThicknessFraction(weight: Double, unit: WeightUnit): Float {
+      val maxStandard = if (unit == WeightUnit.LBS) 45.0 else 25.0
+      val normalized = (weight / maxStandard).coerceIn(0.0, 1.2)
+      return (0.24f + 0.76f * kotlin.math.sqrt(normalized).toFloat()).coerceIn(0.24f, 1.0f)
+    }
+
+    fun createCustom(
+      weight: Double,
+      unit: WeightUnit,
+      color: Color,
+      availablePairs: Int = 1,
+      isEnabled: Boolean = true,
+      id: Long = 0L
+    ): Plate {
+      val cleanWeight = kotlin.math.round(weight * 100.0) / 100.0
+      return Plate(
+        weight = cleanWeight,
+        unit = unit,
+        color = color,
+        textColor = contrastingTextColor(color),
+        heightRatio = computeHeightRatio(cleanWeight, unit),
+        thicknessFraction = computeThicknessFraction(cleanWeight, unit),
+        isEnabled = isEnabled,
+        availablePairs = maxOf(1, availablePairs),
+        id = id,
+        isCustom = true
+      )
+    }
+
     val DEFAULT_LBS_PLATES = listOf(
       Plate(weight = 45.0, unit = WeightUnit.LBS, color = PlateRed, textColor = Color.White, heightRatio = 1.0f, thicknessFraction = 1.0f),
       Plate(weight = 35.0, unit = WeightUnit.LBS, color = PlateBlue, textColor = Color.White, heightRatio = 0.88f, thicknessFraction = 0.85f),
@@ -73,7 +137,8 @@ data class PlateCalculationResult(
   val achievedTotalWeight: Double,
   val remainder: Double,
   val isExact: Boolean,
-  val isUnderBarWeight: Boolean
+  val isUnderBarWeight: Boolean,
+  val hasActiveInventory: Boolean = true
 )
 
 data class WarmupSet(

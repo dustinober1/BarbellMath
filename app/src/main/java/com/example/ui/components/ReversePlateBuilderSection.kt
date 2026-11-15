@@ -183,84 +183,101 @@ fun ReversePlateBuilderSection(
       Spacer(modifier = Modifier.height(8.dp))
 
       // Grid of available plate chips to tap
-      Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-      ) {
-        availablePlates.filter { it.isEnabled }.chunked(3).forEach { rowPlates ->
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-          ) {
-            rowPlates.forEach { plate ->
-              val loadedCount = reversePlatesPerSide.find { it.plate.weight == plate.weight }?.quantity ?: 0
+      val enabledPlates = availablePlates.filter { it.isEnabled && it.availablePairs > 0 }
+      if (enabledPlates.isEmpty()) {
+        Surface(
+          shape = RoundedCornerShape(12.dp),
+          color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Text(
+            text = "No plates are enabled in Settings. Enable or add custom plates to rack them.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier.padding(12.dp)
+          )
+        }
+      } else {
+        Column(
+          verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+          enabledPlates.chunked(3).forEach { rowPlates ->
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+              rowPlates.forEach { plate ->
+                val loadedCount = reversePlatesPerSide.find { kotlin.math.abs(it.plate.weight - plate.weight) < 0.001 }?.quantity ?: 0
+                val atCapacity = loadedCount >= plate.availablePairs
 
-              Surface(
-                modifier = Modifier
-                  .weight(1f)
-                  .clip(RoundedCornerShape(12.dp))
-                  .border(
-                    width = if (loadedCount > 0) 2.dp else 1.dp,
-                    color = if (loadedCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                    shape = RoundedCornerShape(12.dp)
-                  )
-                  .clickable { onAddPlate(plate) }
-                  .testTag("rack_plate_${plate.formattedWeight}"),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(12.dp)
-              ) {
-                Row(
-                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
-                  verticalAlignment = Alignment.CenterVertically,
-                  horizontalArrangement = Arrangement.SpaceBetween
+                Surface(
+                  modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .border(
+                      width = if (loadedCount > 0) 2.dp else 1.dp,
+                      color = if (loadedCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                      shape = RoundedCornerShape(12.dp)
+                    )
+                    .clickable(enabled = !atCapacity) { onAddPlate(plate) }
+                    .testTag("rack_plate_${plate.formattedWeight}"),
+                  color = if (atCapacity) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surfaceVariant,
+                  shape = RoundedCornerShape(12.dp)
                 ) {
                   Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                   ) {
-                    Box(
-                      modifier = Modifier
-                        .size(24.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(plate.color),
-                      contentAlignment = Alignment.Center
+                    Row(
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                      Box(
+                        modifier = Modifier
+                          .size(24.dp)
+                          .clip(RoundedCornerShape(6.dp))
+                          .background(plate.color),
+                        contentAlignment = Alignment.Center
+                      ) {
+                        Text(
+                          text = plate.formattedWeight,
+                          style = MaterialTheme.typography.labelSmall,
+                          fontWeight = FontWeight.Black,
+                          color = plate.textColor,
+                          fontSize = if (plate.formattedWeight.length > 3) 8.sp else 9.sp
+                        )
+                      }
                       Text(
-                        text = plate.formattedWeight,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Black,
-                        color = plate.textColor,
-                        fontSize = 9.sp
+                        text = "${plate.formattedWeight} ${unit.shortLabel}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                       )
                     }
-                    Text(
-                      text = "${plate.formattedWeight} ${unit.shortLabel}",
-                      style = MaterialTheme.typography.labelMedium,
-                      fontWeight = FontWeight.Bold,
-                      color = MaterialTheme.colorScheme.onSurface
-                    )
-                  }
 
-                  if (loadedCount > 0) {
-                    Surface(
-                      color = MaterialTheme.colorScheme.primary,
-                      shape = RoundedCornerShape(6.dp)
-                    ) {
-                      Text(
-                        text = "$loadedCount",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                        fontSize = 11.sp
-                      )
+                    if (loadedCount > 0) {
+                      Surface(
+                        color = if (atCapacity) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(6.dp)
+                      ) {
+                        Text(
+                          text = if (atCapacity) "$loadedCount/${plate.availablePairs}" else "$loadedCount",
+                          style = MaterialTheme.typography.labelSmall,
+                          fontWeight = FontWeight.Black,
+                          color = if (atCapacity) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onPrimary,
+                          modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                          fontSize = 10.sp
+                        )
+                      }
                     }
                   }
                 }
               }
-            }
-            // Fill empty cells if row < 3
-            repeat(3 - rowPlates.size) {
-              Spacer(modifier = Modifier.weight(1f))
+              // Fill empty cells if row < 3
+              repeat(3 - rowPlates.size) {
+                Spacer(modifier = Modifier.weight(1f))
+              }
             }
           }
         }

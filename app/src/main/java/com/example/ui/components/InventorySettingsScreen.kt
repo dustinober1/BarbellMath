@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,7 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
@@ -29,18 +29,19 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,7 +53,6 @@ import androidx.compose.ui.unit.sp
 import com.example.model.BarType
 import com.example.model.Plate
 import com.example.model.WeightUnit
-import com.example.ui.theme.PlateGreen
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -64,6 +64,9 @@ fun InventorySettingsScreen(
   collarsEnabled: Boolean,
   onTogglePlate: (Double) -> Unit,
   onUpdatePairs: (Double, Int) -> Unit,
+  onAddCustomPlate: (weight: Double, color: Color, availablePairs: Int) -> String? = { _, _, _ -> null },
+  onUpdateCustomPlate: (originalPlate: Plate, newWeight: Double, color: Color, availablePairs: Int) -> String? = { _, _, _, _ -> null },
+  onDeleteCustomPlate: (Plate) -> Unit = {},
   onUnitChange: (WeightUnit) -> Unit,
   onExclude35s: () -> Unit,
   onEnableAll: () -> Unit,
@@ -73,8 +76,10 @@ fun InventorySettingsScreen(
   onNavigateBack: () -> Unit,
   modifier: Modifier = Modifier
 ) {
-  // Support system back press to return to main calculator tab
   BackHandler(onBack = onNavigateBack)
+
+  var showAddPlateDialog by remember { mutableStateOf(false) }
+  var editingCustomPlate by remember { mutableStateOf<Plate?>(null) }
 
   Column(
     modifier = modifier
@@ -183,7 +188,7 @@ fun InventorySettingsScreen(
               modifier = Modifier.size(18.dp)
             )
             Text(
-              text = "The calculator only loads plates that are toggled on below. Excluded plates (like 35 lb plates) will never be suggested.",
+              text = "The calculator only loads enabled plates up to the pairs you own. Add custom fractional or specialty plates anytime.",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurface
             )
@@ -198,13 +203,16 @@ fun InventorySettingsScreen(
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
+        val excludeTargetWeight = if (unit == WeightUnit.LBS) 35.0 else 15.0
+        val isExcludedActive = plates.none { it.weight == excludeTargetWeight && it.isEnabled }
+
         FlowRow(
           horizontalArrangement = Arrangement.spacedBy(8.dp),
           verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
           Surface(
             shape = RoundedCornerShape(12.dp),
-            color = if (plates.none { it.weight == 35.0 && it.isEnabled }) {
+            color = if (isExcludedActive) {
               MaterialTheme.colorScheme.primary
             } else {
               MaterialTheme.colorScheme.surfaceVariant
@@ -219,7 +227,7 @@ fun InventorySettingsScreen(
               verticalAlignment = Alignment.CenterVertically,
               horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-              if (plates.none { it.weight == 35.0 && it.isEnabled }) {
+              if (isExcludedActive) {
                 Icon(
                   imageVector = Icons.Default.Check,
                   contentDescription = null,
@@ -228,10 +236,10 @@ fun InventorySettingsScreen(
                 )
               }
               Text(
-                text = "Exclude 35 lb Plates",
+                text = if (unit == WeightUnit.LBS) "Exclude 35 lb Plates" else "Exclude 15 kg Plates",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
-                color = if (plates.none { it.weight == 35.0 && it.isEnabled }) {
+                color = if (isExcludedActive) {
                   MaterialTheme.colorScheme.onPrimary
                 } else {
                   MaterialTheme.colorScheme.onSurfaceVariant
@@ -249,7 +257,7 @@ fun InventorySettingsScreen(
               .testTag("preset_minimalist_button")
           ) {
             Text(
-              text = "Minimalist (45/25/10/5)",
+              text = if (unit == WeightUnit.LBS) "Minimalist (45/25/10/5/2.5)" else "Minimalist (25/20/10/5/2.5)",
               style = MaterialTheme.typography.labelSmall,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -294,7 +302,7 @@ fun InventorySettingsScreen(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
           Text(
             text = "Active Weight Unit",
             style = MaterialTheme.typography.titleMedium,
@@ -356,7 +364,7 @@ fun InventorySettingsScreen(
       }
     }
 
-    // 3. Plate Inventory Toggles (Main section)
+    // 3. Plate Inventory Toggles & Custom Plates (Main section)
     Card(
       shape = RoundedCornerShape(28.dp),
       colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -377,18 +385,49 @@ fun InventorySettingsScreen(
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically
         ) {
-          Column {
+          Column(modifier = Modifier.weight(1f)) {
             Text(
               text = "Available Plates (${unit.shortLabel.uppercase()})",
               style = MaterialTheme.typography.titleMedium,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.onSurface
             )
-            val activeCount = plates.count { it.isEnabled }
+            val activeCount = plates.count { it.isEnabled && it.availablePairs > 0 }
             Text(
               text = "$activeCount of ${plates.size} plate types active in gym",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+          }
+
+          FilledTonalButton(
+            onClick = { showAddPlateDialog = true },
+            modifier = Modifier.testTag("add_custom_plate_button")
+          ) {
+            Icon(
+              imageVector = Icons.Default.Add,
+              contentDescription = null,
+              modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+              text = "Add Plate",
+              fontWeight = FontWeight.Bold
+            )
+          }
+        }
+
+        if (plates.none { it.isEnabled && it.availablePairs > 0 }) {
+          Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+            modifier = Modifier.fillMaxWidth()
+          ) {
+            Text(
+              text = "All plates are currently disabled. Enable at least one plate or add a custom plate so the calculator can load weights.",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onErrorContainer,
+              modifier = Modifier.padding(12.dp)
             )
           }
         }
@@ -399,7 +438,13 @@ fun InventorySettingsScreen(
             plate = plate,
             unit = unit,
             onToggle = { onTogglePlate(plate.weight) },
-            onUpdatePairs = { pairs -> onUpdatePairs(plate.weight, pairs) }
+            onUpdatePairs = { pairs -> onUpdatePairs(plate.weight, pairs) },
+            onEditCustom = if (plate.isCustom) {
+              { editingCustomPlate = plate }
+            } else null,
+            onDeleteCustom = if (plate.isCustom) {
+              { onDeleteCustomPlate(plate) }
+            } else null
           )
         }
       }
@@ -500,6 +545,29 @@ fun InventorySettingsScreen(
       }
     }
   }
+
+  if (showAddPlateDialog) {
+    CustomPlateDialog(
+      unit = unit,
+      initialPlate = null,
+      onSave = { weight, color, pairs ->
+        onAddCustomPlate(weight, color, pairs)
+      },
+      onDismiss = { showAddPlateDialog = false }
+    )
+  }
+
+  editingCustomPlate?.let { targetPlate ->
+    CustomPlateDialog(
+      unit = unit,
+      initialPlate = targetPlate,
+      onSave = { weight, color, pairs ->
+        onUpdateCustomPlate(targetPlate, weight, color, pairs)
+      },
+      onDelete = { onDeleteCustomPlate(targetPlate) },
+      onDismiss = { editingCustomPlate = null }
+    )
+  }
 }
 
 @Composable
@@ -508,6 +576,8 @@ private fun PlateInventorySettingRow(
   unit: WeightUnit,
   onToggle: () -> Unit,
   onUpdatePairs: (Int) -> Unit,
+  onEditCustom: (() -> Unit)? = null,
+  onDeleteCustom: (() -> Unit)? = null,
   modifier: Modifier = Modifier
 ) {
   val is35 = (plate.weight == 35.0 && unit == WeightUnit.LBS) || (plate.weight == 15.0 && unit == WeightUnit.KG)
@@ -515,16 +585,17 @@ private fun PlateInventorySettingRow(
   Surface(
     shape = RoundedCornerShape(18.dp),
     color = if (plate.isEnabled) {
-      Color(0xFFF7F2FA)
+      MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
     } else {
-      MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+      MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
     },
     border = androidx.compose.foundation.BorderStroke(
       1.dp,
-      if (plate.isEnabled) Color(0xFFEADDFF) else Color.Transparent
+      if (plate.isEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.25f) else Color.Transparent
     ),
     modifier = modifier
       .fillMaxWidth()
+      .then(if (onEditCustom != null) Modifier.clickable(onClick = onEditCustom) else Modifier)
       .testTag("settings_plate_row_${plate.formattedWeight}")
   ) {
     Row(
@@ -537,7 +608,8 @@ private fun PlateInventorySettingRow(
       // Left: Plate Avatar and Details
       Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.weight(1f)
       ) {
         Box(
           modifier = Modifier
@@ -552,7 +624,7 @@ private fun PlateInventorySettingRow(
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Black,
             color = plate.textColor,
-            fontSize = 12.sp
+            fontSize = if (plate.formattedWeight.length > 3) 10.sp else 12.sp
           )
         }
 
@@ -568,13 +640,27 @@ private fun PlateInventorySettingRow(
               color = if (plate.isEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
 
-            if (is35) {
+            if (plate.isCustom) {
+              Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer
+              ) {
+                Text(
+                  text = "Custom",
+                  style = MaterialTheme.typography.labelSmall,
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 9.sp,
+                  color = MaterialTheme.colorScheme.onSecondaryContainer,
+                  modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                )
+              }
+            } else if (is35) {
               Surface(
                 shape = RoundedCornerShape(6.dp),
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
               ) {
                 Text(
-                  text = "35s",
+                  text = if (unit == WeightUnit.LBS) "35s" else "15s",
                   style = MaterialTheme.typography.labelSmall,
                   fontWeight = FontWeight.Bold,
                   fontSize = 9.sp,
@@ -587,7 +673,7 @@ private fun PlateInventorySettingRow(
 
           Text(
             text = if (plate.isEnabled) {
-              "${plate.availablePairs} pairs in gym"
+              "${plate.availablePairs} ${if (plate.availablePairs == 1) "pair" else "pairs"} in gym"
             } else {
               "Excluded from calculations"
             },
@@ -599,11 +685,43 @@ private fun PlateInventorySettingRow(
         }
       }
 
-      // Right: Pair Steppers & Toggle Switch
+      // Right: Custom actions, Pair Steppers & Toggle Switch
       Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
       ) {
+        if (plate.isCustom && onEditCustom != null) {
+          IconButton(
+            onClick = onEditCustom,
+            modifier = Modifier
+              .size(32.dp)
+              .testTag("edit_custom_plate_${plate.formattedWeight}")
+          ) {
+            Icon(
+              imageVector = Icons.Default.Edit,
+              contentDescription = "Edit custom plate",
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.size(16.dp)
+            )
+          }
+        }
+
+        if (plate.isCustom && onDeleteCustom != null) {
+          IconButton(
+            onClick = onDeleteCustom,
+            modifier = Modifier
+              .size(32.dp)
+              .testTag("delete_custom_plate_${plate.formattedWeight}")
+          ) {
+            Icon(
+              imageVector = Icons.Default.Delete,
+              contentDescription = "Delete custom plate",
+              tint = MaterialTheme.colorScheme.error,
+              modifier = Modifier.size(16.dp)
+            )
+          }
+        }
+
         if (plate.isEnabled) {
           Row(
             verticalAlignment = Alignment.CenterVertically,

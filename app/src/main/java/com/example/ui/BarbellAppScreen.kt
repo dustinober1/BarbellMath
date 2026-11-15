@@ -281,6 +281,7 @@ fun BarbellAppScreen(
 
       // Tab 0: Standard Plate Calculator
       if (uiState.activeTab == 0) {
+        val activePlates = if (uiState.unit == WeightUnit.LBS) uiState.lbsPlates else uiState.kgPlates
         item {
           TargetWeightControlCard(
             targetWeight = uiState.targetWeight,
@@ -290,7 +291,8 @@ fun BarbellAppScreen(
             onTargetWeightChange = { viewModel.setTargetWeight(it) },
             onAdjustWeight = { viewModel.adjustTargetWeight(it) },
             onUnitChange = { viewModel.setUnit(it) },
-            onOpenBarSelector = { isBarSelectorSheetOpen = true }
+            onOpenBarSelector = { isBarSelectorSheetOpen = true },
+            availablePlates = activePlates
           )
         }
 
@@ -309,13 +311,15 @@ fun BarbellAppScreen(
 
         item {
           PlateBreakdownCard(
-            result = uiState.calculationResult
+            result = uiState.calculationResult,
+            onOpenInventorySettings = { viewModel.setActiveTab(3) }
           )
         }
       }
 
       // Tab 1: Warm-up Sets Ladder
       if (uiState.activeTab == 1) {
+        val activePlates = if (uiState.unit == WeightUnit.LBS) uiState.lbsPlates else uiState.kgPlates
         item {
           TargetWeightControlCard(
             targetWeight = uiState.targetWeight,
@@ -325,7 +329,8 @@ fun BarbellAppScreen(
             onTargetWeightChange = { viewModel.setTargetWeight(it) },
             onAdjustWeight = { viewModel.adjustTargetWeight(it) },
             onUnitChange = { viewModel.setUnit(it) },
-            onOpenBarSelector = { isBarSelectorSheetOpen = true }
+            onOpenBarSelector = { isBarSelectorSheetOpen = true },
+            availablePlates = activePlates
           )
         }
 
@@ -371,6 +376,11 @@ fun BarbellAppScreen(
             collarsEnabled = uiState.collarsEnabled,
             onTogglePlate = { viewModel.togglePlateEnabled(it) },
             onUpdatePairs = { weight, pairs -> viewModel.updatePlateAvailablePairs(weight, pairs) },
+            onAddCustomPlate = { weight, color, pairs -> viewModel.addCustomPlate(weight, color, pairs) },
+            onUpdateCustomPlate = { original, newWeight, color, pairs ->
+              viewModel.updateCustomPlate(original, newWeight, color, pairs)
+            },
+            onDeleteCustomPlate = { viewModel.deleteCustomPlate(it) },
             onUnitChange = { viewModel.setUnit(it) },
             onExclude35s = { viewModel.exclude35LbPlates() },
             onEnableAll = { viewModel.enableAllPlates() },

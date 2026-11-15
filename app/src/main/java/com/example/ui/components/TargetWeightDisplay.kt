@@ -54,6 +54,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.BarType
+import com.example.model.Plate
 import com.example.model.WeightUnit
 import com.example.ui.theme.AccentAmber
 
@@ -67,6 +68,7 @@ fun TargetWeightControlCard(
   onAdjustWeight: (Double) -> Unit,
   onUnitChange: (WeightUnit) -> Unit,
   onOpenBarSelector: () -> Unit,
+  availablePlates: List<Plate> = emptyList(),
   modifier: Modifier = Modifier
 ) {
   var isCustomInputOpen by remember { mutableStateOf(false) }
@@ -327,10 +329,20 @@ fun TargetWeightControlCard(
 
       Spacer(modifier = Modifier.height(8.dp))
 
-      val stepValues = if (unit == WeightUnit.LBS) {
+      val baseSteps = if (unit == WeightUnit.LBS) {
         listOf(2.5, 5.0, 10.0, 25.0, 45.0)
       } else {
         listOf(1.0, 2.5, 5.0, 10.0, 20.0, 25.0)
+      }
+      val smallestPairIncrement = availablePlates
+        .filter { it.isEnabled && it.availablePairs > 0 && it.weight > 0.0 }
+        .minOfOrNull { kotlin.math.round(it.weight * 2.0 * 100.0) / 100.0 }
+      val stepValues = remember(baseSteps, smallestPairIncrement) {
+        if (smallestPairIncrement != null && baseSteps.none { kotlin.math.abs(it - smallestPairIncrement) < 0.001 }) {
+          (listOf(smallestPairIncrement) + baseSteps).distinct().sorted()
+        } else {
+          baseSteps
+        }
       }
 
       // Decrement row

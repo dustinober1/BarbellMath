@@ -27,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +44,7 @@ import com.example.ui.theme.PlateGreen
 @Composable
 fun PlateBreakdownCard(
   result: PlateCalculationResult,
+  onOpenInventorySettings: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   Card(
@@ -104,7 +106,7 @@ fun PlateBreakdownCard(
         }
       }
 
-      // Remainder / Under Bar Warning banner if applicable
+      // Remainder / Under Bar / Empty Inventory Warning banner if applicable
       if (result.isUnderBarWeight) {
         Spacer(modifier = Modifier.height(12.dp))
         Surface(
@@ -130,6 +132,46 @@ fun PlateBreakdownCard(
             )
           }
         }
+      } else if (!result.hasActiveInventory) {
+        Spacer(modifier = Modifier.height(12.dp))
+        Surface(
+          color = MaterialTheme.colorScheme.errorContainer,
+          shape = RoundedCornerShape(12.dp),
+          modifier = Modifier.fillMaxWidth()
+        ) {
+          Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              modifier = Modifier.weight(1f)
+            ) {
+              Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(20.dp)
+              )
+              Text(
+                text = "No plates are enabled in your ${result.unit.shortLabel.uppercase()} inventory. Enable or add custom plates to calculate.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer
+              )
+            }
+            TextButton(
+              onClick = onOpenInventorySettings,
+              modifier = Modifier.testTag("manage_plates_cta_button")
+            ) {
+              Text(
+                text = "Manage",
+                fontWeight = FontWeight.Bold
+              )
+            }
+          }
+        }
       } else if (!result.isExact) {
         Spacer(modifier = Modifier.height(12.dp))
         Surface(
@@ -138,21 +180,37 @@ fun PlateBreakdownCard(
           modifier = Modifier.fillMaxWidth()
         ) {
           Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.SpaceBetween
           ) {
-            Icon(
-              imageVector = Icons.Default.Warning,
-              contentDescription = null,
-              tint = MaterialTheme.colorScheme.onTertiaryContainer,
-              modifier = Modifier.size(20.dp)
-            )
-            Text(
-              text = "Achieved ${result.unit.format(result.achievedTotalWeight)} (${result.unit.formatPlain(result.remainder)} ${result.unit.shortLabel} remaining). Check gym plate inventory to add smaller microplates.",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onTertiaryContainer
-            )
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              modifier = Modifier.weight(1f)
+            ) {
+              Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.size(20.dp)
+              )
+              Text(
+                text = "Closest match: ${result.unit.format(result.achievedTotalWeight)} (${result.unit.formatPlain(result.remainder)} ${result.unit.shortLabel} short). Add or enable custom plates to match exactly.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer
+              )
+            }
+            TextButton(
+              onClick = onOpenInventorySettings,
+              modifier = Modifier.testTag("manage_plates_cta_button")
+            ) {
+              Text(
+                text = "Plates",
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onTertiaryContainer
+              )
+            }
           }
         }
       }
