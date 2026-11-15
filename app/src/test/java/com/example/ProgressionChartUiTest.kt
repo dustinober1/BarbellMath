@@ -11,6 +11,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.AppDatabase
 import com.example.data.entity.WorkoutSessionEntity
+import com.example.data.repository.ChartTimeRange
 import com.example.data.repository.LoadingPlanRepository
 import com.example.data.repository.PlateInventoryRepository
 import com.example.data.repository.WorkoutSessionRepository
@@ -119,6 +120,27 @@ class ProgressionChartUiTest {
     composeTestRule.waitForIdle()
 
     assertEquals(3, viewModel.uiState.value.activeTab)
+    composeTestRule.onNodeWithTag("chart_date_range_row").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("chart_range_1m").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(ChartTimeRange.MONTH_1, viewModel.progressionChartState.value.selectedTimeRange)
+
+    composeTestRule.onNodeWithTag("chart_range_3m").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(ChartTimeRange.MONTH_3, viewModel.progressionChartState.value.selectedTimeRange)
+
+    composeTestRule.onNodeWithTag("chart_range_6m").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(ChartTimeRange.MONTH_6, viewModel.progressionChartState.value.selectedTimeRange)
+
+    composeTestRule.onNodeWithTag("chart_range_1y").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(ChartTimeRange.YEAR_1, viewModel.progressionChartState.value.selectedTimeRange)
+
+    composeTestRule.onNodeWithTag("chart_range_all").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(ChartTimeRange.ALL, viewModel.progressionChartState.value.selectedTimeRange)
+
     composeTestRule.onNodeWithTag("progression_kpi_row").assertIsDisplayed()
     composeTestRule.onNodeWithTag("weight_progression_canvas").assertIsDisplayed()
     composeTestRule.onNodeWithTag("main_lazy_column")

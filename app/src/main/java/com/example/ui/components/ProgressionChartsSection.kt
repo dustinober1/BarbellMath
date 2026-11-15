@@ -189,10 +189,12 @@ fun ProgressionChartsSection(
           }
         }
 
-        // Timeframe Filter Row (7D, 30D, 90D, All)
+        // Date Range Filter Row (1M, 3M, 6M, 1Y, All)
         Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(8.dp)
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("chart_date_range_row"),
+          horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
           ChartTimeRange.entries.forEach { range ->
             val isSelected = chartState.selectedTimeRange == range
@@ -204,19 +206,21 @@ fun ProgressionChartsSection(
               } else null,
               modifier = Modifier
                 .weight(1f)
-                .defaultMinSize(minHeight = 40.dp)
+                .defaultMinSize(minHeight = 48.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .clickable { onTimeRangeChange(range) }
                 .testTag("chart_range_${range.label.lowercase()}")
             ) {
               Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.padding(vertical = 8.dp)
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 10.dp)
               ) {
                 Text(
                   text = range.label,
                   style = MaterialTheme.typography.labelMedium,
                   fontWeight = FontWeight.Bold,
+                  maxLines = 1,
+                  softWrap = false,
                   color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                 )
               }

@@ -40,19 +40,19 @@ class ProgressionChartTest {
     assertEquals(10.0, allLbs.netChange!!, 0.001)
     assertEquals(2, allLbs.liftSummaries.size)
 
-    val squat30Days = ProgressionChartAnalyzer.analyze(
+    val squatOneMonth = ProgressionChartAnalyzer.analyze(
       sessions = sessions,
       unit = WeightUnit.LBS,
       selectedLift = "Squat",
-      timeRange = ChartTimeRange.DAYS_30,
+      timeRange = ChartTimeRange.MONTH_1,
       nowMillis = now
     )
-    assertEquals(2, squat30Days.points.size)
-    assertEquals(245.0, squat30Days.points[0].weight, 0.001)
-    assertTrue(squat30Days.points[0].isPersonalBest)
-    assertEquals(235.0, squat30Days.points[1].weight, 0.001)
-    assertEquals(-10.0, squat30Days.netChange!!, 0.001)
-    assertEquals(240.0, squat30Days.averageWeight!!, 0.001)
+    assertEquals(2, squatOneMonth.points.size)
+    assertEquals(245.0, squatOneMonth.points[0].weight, 0.001)
+    assertTrue(squatOneMonth.points[0].isPersonalBest)
+    assertEquals(235.0, squatOneMonth.points[1].weight, 0.001)
+    assertEquals(-10.0, squatOneMonth.netChange!!, 0.001)
+    assertEquals(240.0, squatOneMonth.averageWeight!!, 0.001)
 
     val kgState = ProgressionChartAnalyzer.analyze(
       sessions = sessions,
@@ -66,6 +66,40 @@ class ProgressionChartTest {
     assertNull(kgState.netChange)
     assertNotNull(kgState.personalBestSession)
     assertTrue(kgState.maxWeight > kgState.minWeight)
+  }
+
+  @Test
+  fun dateRangeFilterNarrowsBy1M3M6M1YAndAll() {
+    val dayMillis = 86_400_000L
+    val now = 500L * dayMillis
+    val sessions = listOf(
+      session(id = 1, timestamp = now - 400L * dayMillis, lift = "Squat", weight = 185.0, unit = WeightUnit.LBS), // > 1Y
+      session(id = 2, timestamp = now - 250L * dayMillis, lift = "Squat", weight = 205.0, unit = WeightUnit.LBS), // within 1Y
+      session(id = 3, timestamp = now - 120L * dayMillis, lift = "Squat", weight = 215.0, unit = WeightUnit.LBS), // within 6M
+      session(id = 4, timestamp = now - 50L * dayMillis, lift = "Squat", weight = 225.0, unit = WeightUnit.LBS),  // within 3M
+      session(id = 5, timestamp = now - 10L * dayMillis, lift = "Squat", weight = 245.0, unit = WeightUnit.LBS)   // within 1M
+    )
+
+    assertEquals(
+      1,
+      ProgressionChartAnalyzer.analyze(sessions, WeightUnit.LBS, "Squat", ChartTimeRange.MONTH_1, now).points.size
+    )
+    assertEquals(
+      2,
+      ProgressionChartAnalyzer.analyze(sessions, WeightUnit.LBS, "Squat", ChartTimeRange.MONTH_3, now).points.size
+    )
+    assertEquals(
+      3,
+      ProgressionChartAnalyzer.analyze(sessions, WeightUnit.LBS, "Squat", ChartTimeRange.MONTH_6, now).points.size
+    )
+    assertEquals(
+      4,
+      ProgressionChartAnalyzer.analyze(sessions, WeightUnit.LBS, "Squat", ChartTimeRange.YEAR_1, now).points.size
+    )
+    assertEquals(
+      5,
+      ProgressionChartAnalyzer.analyze(sessions, WeightUnit.LBS, "Squat", ChartTimeRange.ALL, now).points.size
+    )
   }
 
   private fun session(

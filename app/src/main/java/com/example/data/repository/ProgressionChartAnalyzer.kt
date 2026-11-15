@@ -8,10 +8,11 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
-enum class ChartTimeRange(val label: String, val days: Int?) {
-  DAYS_7("7D", 7),
-  DAYS_30("30D", 30),
-  DAYS_90("90D", 90),
+enum class ChartTimeRange(val label: String, val months: Int?) {
+  MONTH_1("1M", 1),
+  MONTH_3("3M", 3),
+  MONTH_6("6M", 6),
+  YEAR_1("1Y", 12),
   ALL("All", null)
 }
 
@@ -52,8 +53,6 @@ data class ProgressionChartState(
 
 object ProgressionChartAnalyzer {
 
-  private const val MILLIS_PER_DAY = 86_400_000L
-
   fun analyze(
     sessions: List<WorkoutSessionEntity>,
     unit: WeightUnit,
@@ -85,7 +84,12 @@ object ProgressionChartAnalyzer {
       it.equals(selectedLift, ignoreCase = true)
     } ?: "All"
 
-    val cutoffMillis = timeRange.days?.let { nowMillis - it.toLong() * MILLIS_PER_DAY }
+    val cutoffMillis = timeRange.months?.let { months ->
+      Calendar.getInstance().apply {
+        timeInMillis = nowMillis
+        add(Calendar.MONTH, -months)
+      }.timeInMillis
+    }
     val timeFilteredUnitSessions = if (cutoffMillis != null) {
       unitSessions.filter { it.timestamp >= cutoffMillis }
     } else {
@@ -107,7 +111,13 @@ object ProgressionChartAnalyzer {
     )
 
     val sameCalendarDay = isSameCalendarDay(chronological)
-    val dateFormatter = SimpleDateFormat(if (sameCalendarDay) "h:mm a" else "MMM d", Locale.getDefault())
+    val sameCalendarYear = isSameCalendarYear(chronological)
+    val datePattern = when {
+      sameCalendarDay -> "h:mm a"
+      sameCalendarYear -> "MMM d"
+      else -> "MMM d ''yy"
+    }
+    val dateFormatter = SimpleDateFormat(datePattern, Locale.getDefault())
 
     val points = chronological.mapIndexed { index, session ->
       val progression = allProgressions[session.id]
@@ -205,6 +215,17 @@ object ProgressionChartAnalyzer {
     return sessions.all { session ->
       cal.timeInMillis = session.timestamp
       cal.get(Calendar.YEAR) == firstYear && cal.get(Calendar.DAY_OF_YEAR) == firstDay
+    }
+  }
+
+  private fun isSameCalendarYear(sessions: List<WorkoutSessionEntity>): Boolean {
+    if (sessions.size <= 1) return true
+    val cal = Calendar.getInstance()
+    cal.timeInMillis = sessions.first().timestamp
+    val firstYear = cal.get(Calendar.YEAR)
+    return sessions.all { session ->
+      cal.timeInMillis = session.timestamp
+      cal.get(Calendar.YEAR) == firstYear
     }
   }
 
