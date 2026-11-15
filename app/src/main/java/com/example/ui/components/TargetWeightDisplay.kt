@@ -198,7 +198,16 @@ fun TargetWeightControlCard(
         }
       }
 
-      Spacer(modifier = Modifier.height(18.dp))
+      Spacer(modifier = Modifier.height(14.dp))
+
+      QuickAddWeightSection(
+        unit = unit,
+        barWeight = effectiveBarWeight,
+        onQuickAdd = onAdjustWeight,
+        onResetToBar = { onTargetWeightChange(effectiveBarWeight) }
+      )
+
+      Spacer(modifier = Modifier.height(16.dp))
 
       // Barbell Type Selector Pill Header
       Text(
@@ -443,6 +452,15 @@ fun TargetWeightControlCard(
             modifier = Modifier
               .fillMaxWidth()
               .testTag("custom_weight_input_field")
+          )
+          Spacer(modifier = Modifier.height(12.dp))
+          QuickAddDialogChips(
+            unit = unit,
+            onAddDelta = { delta ->
+              val base = if (inputText.isBlank()) 0.0 else (inputText.toDoubleOrNull() ?: targetWeight)
+              val next = kotlin.math.round((base + delta) * 100.0) / 100.0
+              inputText = unit.formatPlain(maxOf(0.0, next))
+            }
           )
         }
       },
